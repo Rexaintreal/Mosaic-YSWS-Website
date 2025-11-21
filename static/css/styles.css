@@ -28,7 +28,7 @@ body {
 #start{
     position: absolute;
     top: 65%;
-    left: 50%;
+    left: 49%;
     transform: translate(-50%, -50%);
     color: var(--color);
     font-family: 'Momo Trust Display', sans-serif;
@@ -40,9 +40,15 @@ body {
     height: 60px;
     background-color: #f2545b;
     transition: all 0.2s ease-in-out;
+    animation: hover 0.7s infinite;
 }
 #start:hover{
     cursor: pointer;
     transform: translate(-50%, -50%) scale(1.1);
     box-shadow: 0 0 20px #f2545b, 0 0 30px #f2545b;
+}
+@keyframes hover{
+    0% {transform: translate(-50%, -47%);}
+    50%{transform: translate(-50%, -53%);}
+    100%{transform: translate(-50%, -47%);}
 }
