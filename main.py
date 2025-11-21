@@ -1,8 +1,18 @@
-# Legend:
-# Note for Self == NFS
-# New Concept = NC
 import flask
-from flask import Flask
+from flask import Flask, request, render_template
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI']='sqlite:///db.sqlite3'
+db = SQLAlchemy(app)
 
-app = Flask(__name__) # NFS __name__ is a constructor used to by Flask to identify the location of the particle.
+# with app.app_context():
+#    db.create_all()
+
+@app.route("/")
+def main():
+    return render_template('index.html')
+
+if __name__ == "__main__":
+    app.run(debug=True)
