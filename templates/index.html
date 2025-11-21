@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mosaic - Full Stack YSWS</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='/css/styles.css')}}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css')}}">
 </head>
 <body>
     <div id="container">
         <div id="welcome">
         </div>
         <h1 id="hero1">Welcome to Mosaic - Hack Club's very own <span style="text-decoration: wavy underline;">full-stack</span> YSWS!</h1>
-        <button id="start">LETS BRING SANTA TO TOWN!!</button>
+        <a href="{{ url_for('signin')}}"><button id="start">LETS BRING SANTA TO TOWN!!</button></a>
     </div>
 </body>
 </html>

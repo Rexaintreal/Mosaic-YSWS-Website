@@ -13,6 +13,8 @@ db = SQLAlchemy(app)
 @app.route("/")
 def main():
     return render_template('index.html')
-
+@app.route("/signin")
+def signin():
+    return render_template('register.html')
 if __name__ == "__main__":
     app.run(port=4000, debug=True)
