@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='/js/register.js')}}">
+    <title>Register for Mosaic</title>
+</head>
+<body>
+    <div id="container">
+        <h1>Login to Mosaic</h1>
+        <form>
+            <label for="email">Enter your EMail ID</label> <br>
+            <input type="email" id="email" name="email" required> <br>
+            <label for="name">Enter your first and last name</label> <br>
+            <label for="name">This name will be used in leaderboards!</label> <br>
+            <input type="text" id="name" name="name" required>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap');
+body {
+    margin: 0;
+    font-family: 'Momo Trust Display', sans-serif;
+    background: linear-gradient(135deg, #FF6B6B, #FFD93B, #6BCB77);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#container {
+    width: 350px;
+    padding: 25px;
+    border-radius: 25px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+    text-align: center;
+    transition: transform 0.3s ease-in-out;
+}
+#container:hover{
+    transform: scale(1.05);
+}
+#container h1{
+    font-size: 2em;
+    margin-bottom: 15px;
+    color: #C70039;
+}
+#container form{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+#container label{
+    font-size: 0.9em;
+    color: #2C3E50;
+    text-align: left;
+}
+#container input{
+    border: 2px solid #C70039;
+    border-radius: 10px;
+    padding: 8px;
+    font-size: 1em;
+    color: #2C3E50;
+    outline: none;
+}
+#container input:focus{
+    border-color: #FFD93D;
+    box-shadow: 0 0 8px #FFD93D;
+}
+#container button{
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 15px;
+    border: none;
+    background-color: #C70039;
+    color: white;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+}
+#container button:hover{
+    transform: scale(1.05);
+    box-shadow: 0 0 15px #FFD93D, 0 0 25px #C70039;
+}
