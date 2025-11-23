@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap');
+body{
+    margin: 0;
+    background-color: #cbdfbd;
+}
+#navbar{
+    display: flex;
+    flex-direction: row;
+    justify-content:space-between;
+    gap: 10px;
+    font-family: 'Momo Trust Display', sans-serif;
+    background: #a44a3f;
+    color: #f6f4d2;
+}
+#part1{
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 15px;
+    font-family: 'Momo Trust Display', sans-serif;
+    margin: 5px;
+}
+#part2{
+    font-family: 'Momo Trust Display', sans-serif;
+    margin: 5px;
+}
+.nav-part{
+    transition: all 0.3s ease-in-out;
+    text-shadow: none;
+}
+.nav-part:hover{
+    text-shadow: 0px 0px 20px rgba(212, 224, 155, 1);
+    cursor: pointer;
+}
+.current{
+    text-decoration: underline;
+    text-decoration-thickness: 3px;
+    text-underline-offset: 5px;
+}

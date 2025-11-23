@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Mosaic Dashboard {% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/basenav.css')}}">
+    {% block extra_css %} {% endblock %}
+</head>
+<body>
+    <!--TO DO:
+    1. Navbar
+    2. Connect Hackatime button.
+    3. Add project
+        3i. add project button in center
+        3ii. Overlay to add project name and details
+        3iii. Submission System
+        3iv. Admin review system
+    4. Leaderboard Draft
+    5. Shop System Draft (rather have a in progress banner 😭)
+    6. Profile Settings
+        -->
+    <!--Nav Bar-->
+    <div id="navbar">
+        <div id="part1">
+            <p class="nav-part">My Projects</p>
+            <p class="nav-part">Leaderboard</p>
+            <p class="nav-part">My Profile</p>
+            <p class="nav-part">Shop</p>
+        </div> 
+        <div id="part2">
+            <p>MOSAIC</p>
+        </div>
+    </div>
+</body>
+</html>
