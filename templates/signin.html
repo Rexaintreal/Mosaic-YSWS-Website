@@ -11,12 +11,12 @@
         <h1>Login to Mosaic</h1>
         <!--Part1-->
         <form id="signup-form" {% if show_verify %} style="display: none;" {% endif %} method="post">
-            <label for="email">Enter your Email ID</label>
+            <label for="email">Enter your Email ID (the one you are using in Slack / Hackatime)</label>
             <input type="email" id="email" name="email" required> <br>
             <label for="name">Enter your first and last name</label><br>
             <label for="name">This name will be used in leaderboards!</label> <br>
             <input type="text" id="name" name="name" required> <br>
-            <button type="submit">Send Verification code</button>
+            <button type="submit">Sign Up!</button>
         </form>
         <!-- Part2 -->
         <form id="verify-form" {% if not show_verify %} style="display: none;" {% endif %} method="post">
