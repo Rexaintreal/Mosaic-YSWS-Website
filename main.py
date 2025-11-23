@@ -36,24 +36,40 @@ with app.app_context():
     db.create_all()
 @app.route("/signin", methods=['GET', 'POST'])
 def signin():
-    if request.method=='POST': 
-        name=request.form['name']
-        email = request.form['email']
-        existing_user = User.query.filter_by(email=email).first()
-        if existing_user and existing_user.is_verified:
-            return render_template("signin.html", message="You're already verified")
-        code = random.randint(10000, 99999)
-        if existing_user:
-            existing_user.verification_code = code
+    if request.method == "POST" and "code" in request.form:
+        code = int(request.form['code'])
+        pending_email = session.get('pending_email')
+        if not pending_email:
+            return render_template('signin.html', message = "No pending verification", show_verify = False)
+        user = User.query.filter_by(email = pending_email).first()
+        if user and user.verification_code == code:
+            user.is_verified = True
             db.session.commit()
+            return render_template('signin.html', show_verify = False)
+        return render_template("signin.html", message = "Incorrect Code", show_verify = True)
+    if request.method == "POST":
+        name = request.form['name']
+        email = request.form['email']
+        
+        if not name or not email:
+            return render_template("signin.html", message="Missing name/email, go back to the previous page and reenter please!")
+        
+        exsisting_user = User.query.filter_by(email=email).first()
 
-            send_verfication_email(existing_user.email, existing_user.name, code)
-            return render_template("signin.html", show_verify=True, message="Code Sent!")
+        if exsisting_user and exsisting_user.is_verified:
+            return render_template("signin.html", message="You are verified!")
+        code = random.randint(10000, 99999)
+
+        if exsisting_user:
+            exsisting_user.verification_code = code
+            db.session.commit()
+            send_verfication_email(exsisting_user.email, exsisting_user.name, code)
+            session['pending_email'] = exsisting_user.email
+            return render_template('signin.html', message = "Code Sent!")
         
         new_user = User(
-            name=name,
-            email=email,
-            role="User",
+            name = name,
+            email = email,
             verification_code = code,
             is_verified = False
         )
@@ -62,19 +78,9 @@ def signin():
 
         send_verfication_email(email, name, code)
         session['pending_email'] = email
-        return render_template("signin.html", show_verify=True, message="Code Sent!")
-    elif 'code' in request.form:
-        code = int(request.form('code'))
-        pending_email = session.get("pending_email")
-        user = User.query.filter_by(email=pending_email).first()
-        if user and User.verification_code == code:
-            User.is_verified = True;
-            db.session.commit()
-            return render_template('signin.html', message="Verified Successfully!", show_verify = False)
-        else:
-            return render_template('signin.html', message="Incorrect Code", show_verify = True)
-    return render_template("signin.html")
-           
+        return render_template('signin.html', message = "Code Sent!")
+    
+    return render_template('signin.html')        
 def send_verfication_email(to_email, user_name, code):
     EMAIL = os.getenv("EMAIL_ADDRESS")
     PW= os.getenv("EMAIL_PASSWORD")
