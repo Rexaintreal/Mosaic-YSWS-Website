@@ -122,17 +122,17 @@ body{
     object-fit: 0;
     z-index: 2;
 }
-#project-box{
+.project-box{
     background-color: var(--pine-green);
     border: none;
     border-radius: 20px;
     height: 30px;
 }
-#project-box p{
+.project-box p{
     margin-left: 15px;
     line-height: 25px;
 }
-#project-box input{
+.project-box input{
     margin-left: 15px;
 }
 .last-part{
@@ -144,6 +144,6 @@ body{
 #shipped-status{
     pointer-events: none;
 }
-#hidden{
+.hidden{
     display: none;
 }
