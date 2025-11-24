@@ -1,7 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Bungee+Spice&family=Jersey+25&family=Momo+Trust+Display&display=swap');
+:root{
+    /*Source of Colors: https://coolors.co/e63946-2a9d8f-f1faee-f4d35e-4caf50 */
+    --punch-red: #e63946;
+    --pine-green: #2a9d8f;
+    --honeydew: #f1faee;
+    --royal-gold: #f4d35e;
+    --medium-jungle: #4caf50; /* what are these coolors.co names? */
+}
 body{
     margin: 0;
-    background-color: #cbdfbd;
+    background-color: var(--honeydew);
     font-family: 'Momo Trust Display', sans-serif;
 }
 #navbar{
@@ -10,8 +18,10 @@ body{
     justify-content:space-between;
     gap: 10px;
     font-family: 'Momo Trust Display', sans-serif;
-    background: #a44a3f;
+    background: var(--punch-red);
     color: #f6f4d2;
+    position: relative;
+    z-index: 10;
 }
 #part1{
     display: flex;
@@ -30,7 +40,7 @@ body{
     text-shadow: none;
 }
 .nav-part:hover{
-    text-shadow: 0px 0px 20px rgba(212, 224, 155, 1);
+    text-shadow: 0px 0px 20px var(--royal-gold);
     cursor: pointer;
 }
 .current{
@@ -58,15 +68,17 @@ body{
 #line1 p{
     margin-left: 10px;
     font-size: 30px;
+    position: relative;
+    z-index: 4;
 }
 #icon{
     margin-top: 37px;
     transform: scale(1.5);
-    background-color: #bc4749;
+    background-color: var(--punch-red);
     border-radius: 10px;
     height: fit-content;
     width: fit-content;
-    color: #f6f4d2;
+    color: var(--honeydew);
     transition: all 0.3s ease-in-out;
 }
 #icon:hover{
@@ -83,11 +95,11 @@ body{
     height: 50px;
     margin-left: 5px;
     font-family: "Jersey 25";
-    background-color: #a44a3f;
+    background-color: var(--punch-red);
     border: none;
     font-size: 30px;
     border-radius: 20px;
-    color: white;
+    color: var(--honeydew);
     display:block;
 }
 #decor{
@@ -99,21 +111,12 @@ body{
     z-index: 1;
     pointer-events: none;
 }
-#img1{
-    position: absolute;
-    top: 58px;
-    left: 0;
-    width: 100%;
-    height: 675px;
-    object-fit: 0;
-    z-index: 2;
-}
 #img2{
     position: absolute;
     right: 0;
     bottom: 0;
-    width: auto;
-    height: 700px;
+    width: calc(auto-200px);
+    height: 500px;
     object-fit: 0;
     z-index: 2;
 }
