@@ -47,20 +47,11 @@
                 <span class="material-symbols-outlined" id="icon">add</span>
             </div>
             <div id="line2" class="hackatime">
+                {% if not auto_connect %}
                 <button id="connect">Connect to Hackatime first!</button>
-            </div>
-            <div id="line3">
-                <div class="project-box">
-                    <p class="open">Project 1</p>
-                    <div class="hidden">
-                        <p>Hours spent: <!--Need to add hours tracking for that project here!--></p>
-                        <p><span style="font-style: italic;">Temp Project</span></p>
-                        <input type="checkbox" value="review" name="review"  class="review-status">
-                        <label for="checkbox">In Review</label>
-                        <input type="checkbox" value="shipped" class="last-part shipped-status"> 
-                        <label for="checkbox">Shipped</label>
-                    </div>
-                </div>
+                {% else %}
+                <button id="connect" style="display: none">Connect to Hackatime first!</button>
+                {% endif %}
             </div>
             <div class="overlay-hidden" id="add-project">
                 <h2>Add New Project</h2>
@@ -83,6 +74,19 @@
                     <button type="submit">Add Project</button>
                     <button type="button" id="close-overlay">Cancel</button>
                 </form>
+            </div>
+            <div id="line3">
+                <div class="project-box">
+                    <p class="open">Project 1</p>
+                    <div class="hidden">
+                        <p>Hours spent: <!--Need to add hours tracking for that project here!--></p>
+                        <p><span style="font-style: italic;">Temp Project</span></p>
+                        <input type="checkbox" value="review" name="review"  class="review-status">
+                        <label for="checkbox">In Review</label>
+                        <input type="checkbox" value="shipped" class="last-part shipped-status"> 
+                        <label for="checkbox">Shipped</label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

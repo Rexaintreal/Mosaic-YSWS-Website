@@ -15,7 +15,7 @@ app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db.sqlite3")
 HACKATIME_API_KEY = os.getenv("HACKATIME_API_KEY")
-HACKATIME_BASE_URL = "https://api.hackatime.com/api/v1"
+HACKATIME_BASE_URL = "https://hackatime.com/api/v1"
 
 
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
@@ -41,7 +41,7 @@ with app.app_context():
 
 def autoconnectHackatime():
     headers = {
-        "Authorisation": f"Bearers {HACKATIME_API_KEY}"
+        "Authorization": f"Bearers {HACKATIME_API_KEY}"
     }
 @app.route("/signin", methods=['GET', 'POST'])
 def signin():
@@ -127,7 +127,7 @@ def dashboard():
 
     if user.hackatime_username:
         try:
-            url = f"{HACKATIME_BASE_URL}/api/v1/users/{user.hackatime_username}/projects"
+            url = f"{HACKATIME_BASE_URL}/users/{user.hackatime_username}/projects"
             headers = {f"Authorization": f"Bearers {HACKATIME_API_KEY}"}
             response = requests.get(url, headers=headers, timeout=5)
             if response.status_code == 200:
@@ -175,11 +175,8 @@ def lookup_hackatime(email):
     try:
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
-            data = response.json()
-            return data.get('username')
-        else:
-            print(f"Hackatime lookup failed with status: {response.status_code}")
-            return None
+            return response.json().get('username')
+        return None
     except requests.exceptions.RequestException as e:
         print(f"Hackatimed lookup failed with connection error: {e}")
         return None
