@@ -41,3 +41,23 @@ openButtons.forEach(openButton =>{
         });
     }
 });
+
+const hackProject = document.getElementById('hack-project');
+const hoursDisplay = document.createElement("p");
+
+hoursDisplay.id = "project-hours";
+document.getElementById("add-project-form");
+
+hackProject?.addEventListener("change", async()=>{
+    const projectName = hackProject.value;
+    if (!projectName){
+        return;
+    }
+    try{
+        const response = await fetch('/api/project-hours?project-name=${projectName}');
+        const data = await response.json();
+        hoursDisplay.textContent = 'Hours Spent: ${data.hours || 0';
+    } catch(e){
+        hoursDisplay.textContent = 'Failed to fetch hours!';
+    }
+});

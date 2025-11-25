@@ -9,10 +9,14 @@ from flask import Flask, request, render_template, redirect, session
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
+import requests
 
 app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db.sqlite3")
+HACKATIME_API_KEY = os.getenv("HACKATIME_API_KEY")
+HACKATIME_BASE_URL = "https://api.hackatime.com/api/v1"
+
 
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 db = SQLAlchemy(app)
@@ -31,9 +35,14 @@ class User(db.Model, UserMixin):
     slack_id = db.Column(db.String(255), nullable=True, unique=True)
     verification_code = db.Column(db.Integer)
     is_verified = db.Column(db.Boolean, default=False)
-
+    hackatime_username = db.Column(db.String(255), nullable=True)
 with app.app_context():
     db.create_all()
+
+def autoconnectHackatime():
+    headers = {
+        "Authorisation": f"Bearers {HACKATIME_API_KEY}"
+    }
 @app.route("/signin", methods=['GET', 'POST'])
 def signin():
     if request.method == "POST" and "code" in request.form:
@@ -44,8 +53,13 @@ def signin():
         user = User.query.filter_by(email = pending_email).first()
         if user and user.verification_code == code:
             user.is_verified = True
+            hackatime_user = lookup_hackatime(user.email)
+            if hackatime_user:
+                user.hackatime_username = hackatime_user
+                print(f"User successfully connected to Hackatime")
             db.session.commit()
-            return render_template('signin.html', show_verify = False)
+            session['user_id'] = user.id
+            return redirect('/dashboard')
         return render_template("signin.html", message = "Incorrect Code", show_verify = True)
     if request.method == "POST":
         name = request.form['name']
@@ -57,7 +71,7 @@ def signin():
         exsisting_user = User.query.filter_by(email=email).first()
 
         if exsisting_user and exsisting_user.is_verified:
-            return render_template("signin.html", message="You are verified!")
+            return redirect("/dashboard")
         code = random.randint(10000, 99999)
 
         if exsisting_user:
@@ -104,7 +118,73 @@ def send_verfication_email(to_email, user_name, code):
 
 @app.route('/dashboard')
 def dashboard():
-    return render_template('dashboard.html')
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect("/signin")
+    user = User.query.get(user_id)
+    projects = []
+    auto_connected = False
+
+    if user.hackatime_username:
+        try:
+            url = f"{HACKATIME_BASE_URL}/api/v1/users/{user.hackatime_username}/projects"
+            headers = {f"Authorization": f"Bearers {HACKATIME_API_KEY}"}
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                projects = response.json()
+                auto_connected = True
+        except Exception as e:
+            print(f"Auto-connect failed as {e}")
+    return render_template('dashboard.html', user=user, projects=projects, auto_connected=auto_connected)
+
+@app.route("/api/project-hours", methods=['GET'])  
+def get_project_hours():
+    user_id = session.get('user_id')
+    project_name = request.args.get('project-name')
+    if not user_id or not project_name:
+        return flask.jsonify({'error': "Missing user or project name"}), 400
+    user = User.query.get(user_id)
+    if not user or not user.hackatime_username:
+        return flask.jsonify({'error' : "Hackatime not connected"}), 404
+    
+    encode_name = requests.utils.quote(project_name, safe="")
+    url = f"{HACKATIME_BASE_URL}/users/{user.hackatime_username}/projects/{encode_name}"
+    headers = {f"Authorization": f"Bearers {HACKATIME_API_KEY}" }
+
+    try: 
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            total_seconds = data.get('total_seconds', 0)
+            hours = round(total_seconds/3600, 2) if total_seconds else 0
+            return flask.jsonify({'hours': hours})
+        else:
+            return flask.jsonify({'error': f"Hackatime API Failed to fetch projects"}), 500
+    except requests.exceptions.RequestException:
+        return flask.jsonify({'error': "Failed to connect to Hakcatime API"}), 500
+    
+        
+
+    
+
+def lookup_hackatime(email):
+    url = f"{HACKATIME_BASE_URL}/users/lookup-email/{email}"
+    headers = {
+        "Authorization": f"Bearer {HACKATIME_API_KEY}"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('username')
+        else:
+            print(f"Hackatime lookup failed with status: {response.status_code}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Hackatimed lookup failed with connection error: {e}")
+        return None
+
+
 
 if __name__ == "__main__":
     app.run(port=4000, debug=True)
