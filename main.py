@@ -36,12 +36,23 @@ class User(db.Model, UserMixin):
     verification_code = db.Column(db.Integer)
     is_verified = db.Column(db.Boolean, default=False)
     hackatime_username = db.Column(db.String(255), nullable=True)
+
+class Project(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    user_id = db.Column(db.Integer, primary_key = True)
+    name = db.Column(db.String(255), nullable=False)
+    detail = db.Column(db.String(255), nullable = False)
+    hackatime_project = db.Column(db.String(255), nullable = False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    total_seconds = db.Column(db.Integer, default=0)
+
+    user = db.relationship('User', backref=db.backref('projects'), lazy=True)
 with app.app_context():
     db.create_all()
 
 def autoconnectHackatime():
     headers = {
-        "Authorization": f"Bearers {HACKATIME_API_KEY}"
+        "Authorization": f"Bearer {HACKATIME_API_KEY}"
     }
 @app.route("/signin", methods=['GET', 'POST'])
 def signin():
@@ -128,13 +139,15 @@ def dashboard():
     if user.hackatime_username:
         try:
             url = f"{HACKATIME_BASE_URL}/users/{user.hackatime_username}/projects"
-            headers = {f"Authorization": f"Bearers {HACKATIME_API_KEY}"}
+            headers = autoconnectHackatime()
             response = requests.get(url, headers=headers, timeout=5)
             if response.status_code == 200:
                 projects = response.json()
                 auto_connected = True
         except Exception as e:
             print(f"Auto-connect failed as {e}")
+    
+    saved_projects = Project.query.filter_by(user_id=user).all()
     return render_template('dashboard.html', user=user, projects=projects, auto_connected=auto_connected)
 
 @app.route("/api/project-hours", methods=['GET'])  
@@ -149,7 +162,7 @@ def get_project_hours():
     
     encode_name = requests.utils.quote(project_name, safe="")
     url = f"{HACKATIME_BASE_URL}/users/{user.hackatime_username}/projects/{encode_name}"
-    headers = {f"Authorization": f"Bearers {HACKATIME_API_KEY}" }
+    headers = autoconnectHackatime()
 
     try: 
         response = requests.get(url, headers=headers, timeout=5)
@@ -163,15 +176,43 @@ def get_project_hours():
     except requests.exceptions.RequestException:
         return flask.jsonify({'error': "Failed to connect to Hakcatime API"}), 500
     
-        
+@app.route("/api/add-project", methods=['GET'])
+def add_project_api():
+    user_id = session.get('user_id')
+    if not user_id:
+        return flask.jsonify({'error' : 'Unauthorized'}), 401
+    user = User.query.get(user_id)
+    if not user:
+        return flask.jsonify({'error': 'User not found'}), 404
+    data = request.get_json()
+    name = data.get('name')
+    detail = data.get('detail')
+    hack_project = data.get('hack_project')
 
+    if not name:
+        return flask.jsonify({'error': 'Missing project name'}), 400
     
+    new_project = Project(
+        user_id = user.id,
+        name=name,
+        detail = detail,
+        hack_project = hack_project
+    )
+    db.session.add(new_project)
+    db.session.commit()
+
+    return flask.jsonify({
+        'id': new_project.id,
+        'name': new_project.name,
+        'detail': new_project.detail,
+        'hack_project': new_project.hackatime_project
+    }), 201
+    
+
 
 def lookup_hackatime(email):
     url = f"{HACKATIME_BASE_URL}/users/lookup-email/{email}"
-    headers = {
-        "Authorization": f"Bearer {HACKATIME_API_KEY}"
-    }
+    headers = autoconnectHackatime()
     try:
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
