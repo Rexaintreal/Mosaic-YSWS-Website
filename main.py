@@ -39,7 +39,7 @@ class User(db.Model, UserMixin):
 
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key = True)
-    user_id = db.Column(db.Integer, primary_key = True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key = True)
     name = db.Column(db.String(255), nullable=False)
     detail = db.Column(db.String(255), nullable = False)
     hackatime_project = db.Column(db.String(255), nullable = False)
@@ -51,7 +51,7 @@ with app.app_context():
     db.create_all()
 
 def autoconnectHackatime():
-    headers = {
+    return {
         "Authorization": f"Bearer {HACKATIME_API_KEY}"
     }
 @app.route("/signin", methods=['GET', 'POST'])
@@ -147,7 +147,7 @@ def dashboard():
         except Exception as e:
             print(f"Auto-connect failed as {e}")
     
-    saved_projects = Project.query.filter_by(user_id=user).all()
+    saved_projects = Project.query.filter_by(user_id=user.id).all()
     return render_template('dashboard.html', user=user, projects=projects, auto_connected=auto_connected)
 
 @app.route("/api/project-hours", methods=['GET'])  
@@ -225,4 +225,4 @@ def lookup_hackatime(email):
 
 
 if __name__ == "__main__":
-    app.run(port=4000, debug=True)
+    app.run(port=3700, debug=True)
