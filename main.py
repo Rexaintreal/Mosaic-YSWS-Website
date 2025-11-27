@@ -39,7 +39,7 @@ class User(db.Model, UserMixin):
 
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key = True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key = True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     detail = db.Column(db.String(255), nullable = False)
     hackatime_project = db.Column(db.String(255), nullable = False)
@@ -136,7 +136,7 @@ def dashboard():
     projects = []
     auto_connected = False
 
-    if user.hackatime_username:
+    if user and user.hackatime_username:
         try:
             url = f"{HACKATIME_BASE_URL}/users/{user.hackatime_username}/projects"
             headers = autoconnectHackatime()
@@ -148,7 +148,7 @@ def dashboard():
             print(f"Auto-connect failed as {e}")
     
     saved_projects = Project.query.filter_by(user_id=user.id).all()
-    return render_template('dashboard.html', user=user, projects=projects, auto_connected=auto_connected)
+    return render_template('dashboard.html', user=user, projects=projects, auto_connected=auto_connected, saved_projects=saved_projects)
 
 @app.route("/api/project-hours", methods=['GET'])  
 def get_project_hours():
@@ -176,7 +176,7 @@ def get_project_hours():
     except requests.exceptions.RequestException:
         return flask.jsonify({'error': "Failed to connect to Hakcatime API"}), 500
     
-@app.route("/api/add-project", methods=['GET'])
+@app.route("/api/add-project", methods=['POST'])
 def add_project_api():
     user_id = session.get('user_id')
     if not user_id:
@@ -187,7 +187,7 @@ def add_project_api():
     data = request.get_json()
     name = data.get('name')
     detail = data.get('detail')
-    hack_project = data.get('hack_project')
+    hackatime_project = data.get('hack_project')
 
     if not name:
         return flask.jsonify({'error': 'Missing project name'}), 400
@@ -196,7 +196,7 @@ def add_project_api():
         user_id = user.id,
         name=name,
         detail = detail,
-        hack_project = hack_project
+        hackatime_project = hackatime_project
     )
     db.session.add(new_project)
     db.session.commit()
@@ -205,7 +205,7 @@ def add_project_api():
         'id': new_project.id,
         'name': new_project.name,
         'detail': new_project.detail,
-        'hack_project': new_project.hackatime_project
+        'hackatime_project': new_project.hackatime_project
     }), 201
     
 

@@ -47,7 +47,7 @@
                 <span class="material-symbols-outlined" id="icon">add</span>
             </div>
             <div id="line2" class="hackatime">
-                {% if not auto_connect %}
+                {% if not auto_connected %}
                 <button id="connect">Connect to Hackatime first!</button>
                 {% else %}
                 <button id="connect" style="display: none">Connect to Hackatime first!</button>
@@ -58,15 +58,17 @@
                 <form id="add-project-form">
                     <label for="project-name">Enter Project Name: </label>
                     <input type="text" id="project-name" name="project-name" required>
-                    
                     <label for="hack-project">Choose Hackatime Project</label>
                     <select id="hack-project" name="hack-project">
-                        {% if auto_connect and projects %}
-                            {% for Project in projects %}
+                        <option value="">None / Choose a Hackatime Project</option>
+                        {% if auto_connected and projects %}
+                            {% for project in projects %}
                                 <option value="{{ project['name']}}">{{ project['name']}}</option>
                             {% endfor %}
                         {% endif %}
                     </select>
+
+                    <p id="project-hours" aria-live="polite"></p>
 
                     <label for="project-detail">One liner detail please:</label>
                     <input type="text" id="project-detail" name="project-detail" placeholder="Breif One-line detail!">
@@ -76,6 +78,19 @@
                 </form>
             </div>
             <div id="line3">
+                {% for sp in saved_projects %}
+                <div class="project-box">
+                    <p class="open">{{ sp.name }}</p>
+                    <div class="hidden">
+                        <p>Hours spent: {{ (sp.total_seconds // 3600) if sp.total_seconds else 0 }}</p>
+                        <p><span style="font-style: italic;">{{ sp.detail or 'No Description' }}</span></p>
+                        <input type="checkbox" value="review" name="review"  class="review-status">
+                        <label for="checkbox">In Review</label>
+                        <input type="checkbox" value="shipped" class="last-part shipped-status"> 
+                        <label for="checkbox">Shipped</label>
+                    </div>
+                </div>
+                {% endfor %}
                 <div class="project-box">
                     <p class="open">Project 1</p>
                     <div class="hidden">

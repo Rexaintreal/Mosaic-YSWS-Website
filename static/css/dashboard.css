@@ -149,24 +149,86 @@ body{
 }
 #overlay{
     display: none;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.55);
+    z-index: 50;
 }
 .overlay-hidden{
     display: none;
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    inset: 0;
     z-index: 50;
     justify-content: center;
     align-items: center;
 }
-#add-project-overaly form{
+#add-project form{
     background-color: var(--honeydew);
     padding: 25px;
     border-radius: 15px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+#add-project {
+    width: 450px;
+    max-width: calc(100% - 60px);
+    margin: auto;
+    background-color: var(--honeydew);
+    padding: 22px;
+    border-radius: 12px;
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+#add-project label{
+    font-size: 14px;
+    margin-top: 6px;
+}
+#add-project input[type="text"], #add-project select{
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.8);
+    font-size: 16px;
+}
+#add-project button[type="submit"]{
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background-color: var(--royal-gold);
+    cursor: pointer;
+    font-size: 16px;
+    color:var(--honeydew);
+}
+#close-overlay{
+    margin-top: 6px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    background: transparent;
+    cursor: pointer;
+}
+.project-box{
+    border-radius: 12px;
+    background-color: var(--pine-green);
+    padding: 8px;
+    margin: 10px 0;
+    transition: height 0.25s ease, transform 0.12s ease;
+}
+.project-box p{
+    margin: 0;
+    color: var(--honeydew);
+    font-weight: 600;
+}
+.hidden{
+    display: none;
+    margin-top: 8px;
+}
+#line1 #icon {
+    background-color: var(--pine-green);
+    padding: 6px;
+    border-radius: 8px;
 }
