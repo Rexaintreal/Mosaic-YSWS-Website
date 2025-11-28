@@ -9,18 +9,24 @@ from flask import Flask, request, render_template, redirect, session
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
+from dotenv import load_dotenv
 import requests
+load_dotenv()
 
 app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db.sqlite3")
 HACKATIME_API_KEY = os.getenv("HACKATIME_API_KEY")
-HACKATIME_BASE_URL = "https://hackatime.com/api/v1"
+HACKATIME_BASE_URL = "https://hackatime.hackclub.com/api/hackatime/v1"
+
 
 
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 db = SQLAlchemy(app)
 app.secret_key = os.getenv("SECRET_KEY")
+
+if not HACKATIME_API_KEY:
+    print("WARNING HACKATIME API KEY NOT WORKING!")
 
 @app.route("/")
 def main():
@@ -82,6 +88,7 @@ def signin():
         exsisting_user = User.query.filter_by(email=email).first()
 
         if exsisting_user and exsisting_user.is_verified:
+            session['user_id'] = exsisting_user.id
             return redirect("/dashboard")
         code = random.randint(10000, 99999)
 
@@ -144,6 +151,9 @@ def dashboard():
             if response.status_code == 200:
                 projects = response.json()
                 auto_connected = True
+            else:
+                print(f"HACKATIME API KEY NOT WORKING STATUS CODE: {response.status_code}")
+                print(f"HACKATIME API KEY NOT WORKING STATUS CODE: {response.text}")
         except Exception as e:
             print(f"Auto-connect failed as {e}")
     
@@ -211,7 +221,7 @@ def add_project_api():
 
 
 def lookup_hackatime(email):
-    url = f"{HACKATIME_BASE_URL}/users/lookup-email/{email}"
+    url = f"{HACKATIME_BASE_URL}/users/lookup_email/{email}"
     headers = autoconnectHackatime()
     try:
         response = requests.get(url, headers=headers, timeout=5)
@@ -222,6 +232,9 @@ def lookup_hackatime(email):
         print(f"Hackatimed lookup failed with connection error: {e}")
         return None
 
+@app.route('/leaderboard', methods=['GET', 'POST'])
+def leaderboard():
+    return render_template('leaderboard.html')
 
 
 if __name__ == "__main__":
