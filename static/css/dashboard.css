@@ -232,3 +232,7 @@ body{
     padding: 6px;
     border-radius: 8px;
 }
+#api-key-input{
+    display: none;
+    margin-top: 10px;
+}

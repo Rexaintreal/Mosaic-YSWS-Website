@@ -49,8 +49,13 @@
             <div id="line2" class="hackatime">
                 {% if not auto_connected %}
                 <button id="connect">Connect to Hackatime first!</button>
+                <div id="api-key-input">
+                    <p>Copy your API key from <a href="https://hackatime.hackclub.com/settings" target="_blank">Hackatime Settings</a> (dw this is confidential) and paste it below: </p>
+                    <input type="text" id="hackatime-api-key" placeholder="Paste API Key here">
+                    <button id="save-key">Save API Key</button>
+                </div>
                 {% else %}
-                <button id="connect" style="display: none">Connect to Hackatime first!</button>
+                <p>Connected to Hackatime</p>
                 {% endif %}
             </div>
             <div class="overlay-hidden" id="add-projectg" style="display: none;">

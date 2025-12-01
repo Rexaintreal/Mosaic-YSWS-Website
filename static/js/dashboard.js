@@ -120,3 +120,18 @@ addProjectForm.addEventListener("submit", async (e)=>{
         alert("Failed to add Project: " + (data.error || "Unknown error"));
     }
 });
+const connectButton = document.getElementById("connect");
+const apiKeyInput = document.getElementById("api-key-input");
+const saveButton = document.getElementById("save-key");
+
+connectButton?.addEventListener("click", ()=>{
+    apiKeyInput.style.display = "block";
+    connectButton.style.display = "none";
+});
+saveButton?.addEventListener("click", async ()=>{
+    const apiKey = document.getElementById("hackatime-api-key").value.trim();
+    if (!apiKey){
+        return alert("Please paste your API Key! If you worry this isn't safe, please reach out to @the space man, and he will guide you!")
+    }
+    const res = await fetch("/api/save-hackatimep-key")
+});
