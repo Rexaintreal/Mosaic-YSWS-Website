@@ -48,7 +48,7 @@ hackProject?.addEventListener("change", async()=>{
         return;
     }
     try{
-        const params = new URLSearchParams({'project-name': projectName})
+        const params = new URLSearchParams({'project_name': projectName})
         const response = await fetch('/api/project-hours?'+params.toString());
         const data = await response.json();
         if (response.ok){
@@ -75,13 +75,20 @@ closeOverlay?.addEventListener("click", ()=>{
     addProjectOverlay.style.display = "none";
     mainOverlay.style.display = "none";
     mainOverlay.removeEventListener('click', overlayClickClose)
+    resetOverlay();
 });
 function overlayClickClose(e){
     if (e.target == mainOverlay){
         addProjectOverlay.style.display = "none";
         mainOverlay.style.display = "none";
         mainOverlay.removeEventListener('click', overlayClickClose)
+        resetOverlay();
     }
+}
+function resetOverlay(){
+    addProjectForm.reset();
+    if (hackProject) hackProject.value = "";
+    if (hoursDisplay) hoursDisplay.textContent = "No Project Selected";
 }
 addProjectForm.addEventListener("submit", async (e)=>{
     e.preventDefault();
@@ -90,33 +97,66 @@ addProjectForm.addEventListener("submit", async (e)=>{
     const projectDetail = document.getElementById('project-detail').value;
     const hackProjectValue = document.getElementById('hack-project').value;
     
-    const response = await fetch("/api/add-project", {
-        method: "POST",
-        headers: {
-            "Content-Type" : "application/json"
-        },
-        body: JSON.stringify({
-            name: projectName,
-            detail: projectDetail,
-            hackProject: hackProjectValue
-        })
-    });
-    const data = await response.json();
-    if (response.ok){
-        const projectBox = document.createElement("div");
-        projectBox.classList.add("project-box");
-        let hoursText = "Hours Spent: 0";
-        projectBox.innerHTML = `
-        <p class="open">${data.name}</p>
+    const projectBox = document.createElement('div');
+    projectBox.classList.add('project-box');
+    projectBox.innerHTML = `
+        <p class="open">${projectName}</p>
         <div class="hidden">
-            <p class="hours-display">${hoursText}</p>
-            <p><span style="font-style:italic;">${data.detail || 'No Description'}</span>
-            <input type="checkbox" value="review" class="review-status">
-            <label>In Review</label>
-            <input type="checkbox" value="shipped" class="shipped status">
-            <label>Shipped</label>
-        `
-    } else {
-        alert("Failed to add Project: " + (data.error || "Unknown error"));
+            <p class="hours-display">Hours Spent: 0</p>
+            <p><span style="font-style: italic;">${projectDetail || "No Description"}</span></p>
+            <input type="checkbox" value="review" name="review"  class="review-status">
+            <label for="checkbox">In Review</label>
+            <input type="checkbox" value="shipped" class="last-part shipped-status"> 
+            <label for="checkbox">Shipped</label>
+        </div>
+    `;
+    const line3 = document.getElementById('line3');
+    line3.appendChild(projectBox);
+
+    const openButton = projectBox.querySelector('.open');
+    const hiddenDetails = projectBox.querySelector('.hidden');
+    let isOpen = false;
+    openButton.addEventListener("click", ()=>{
+        if (!isOpen) {
+            setTimeout(()=>{
+                hiddenDetails.style.display="block";
+            }, 200);
+            projectBox.style.height = "150px";
+            projectBox.style.transition = "all 0.3s ease";
+            isOpen = true;
+        } else {
+            hiddenDetails.style.display = "none";
+            projectBox.style.height = "60px";
+            projectBox.style.transition = "all 0.3s ease";
+            isOpen = false;
+        }
+    });
+    
+    const newReview = projectBox.querySelector('.review-status');
+    const newShipped = projectBox.querySelector('.shipped-status');
+    newReview.addEventListener("click", (e) => e.preventDefault());
+    newShipped.addEventListener("click", (e) => e.preventDefault());
+
+    if (hackProjectValue){
+    try{
+        const params = new URLSearchParams({'project_name': hackProjectValue});
+        const response = await fetch('/api/project-hours?'+params.toString());
+        const data = await response.json();
+        const hoursDisplay = projectBox.querySelector('.hours-display');
+        if (response.ok){
+            hoursDisplay.textContent= 'Hours Spent: ' + (data.hours ?? 0);
+        } else {
+            hoursDisplay.textContent = 'Error: ' + (data.error || "Failed to fetch hours");
+        } 
+    } catch(e){
+        projectBox.querySelector('.hours-display').textContent = 'Failed to fetch hours!';    
     }
+    }
+    addProjectOverlay.style.display = "none";
+    mainOverlay.style.display = "none";
+    mainOverlay.removeEventListener('click', overlayClickClose)
+
+    addProjectForm.reset();
+    resetOverlay();
 });
+

@@ -83,7 +83,7 @@ def callback():
     
     slack_user_id = data["authed_user"]["id"]
     slack_access_token = data["authed_user"]["access_token"]
-    slack_email = data["authed_user"]["email"]
+    slack_email = data.get("authed", {}).get("email")
 
     user = User.query.filter_by(slack_id=slack_user_id).first()
     if not user:
@@ -111,14 +111,28 @@ def dashboard():
 
             if response.status_code == 200:
                 data = response.json()
-                projects = data.get('projects', [])
-            else:
-                print("Failed to fetch Hackatime projects", response.text)
+                print("hackatime projects data:", data)
+                raw_projects = data.get("data", {}).get('projects', [])
+                print("hackatime projects data:", data)
+                if isinstance(raw_projects, list):
+                    projects = []
+                    for proj in raw_projects:
+                        projects.append({
+                            'name': proj.get('name'),
+                            'total_seconds': proj.get('total_seconds', 0),
+                            'detail': proj.get('description', '')
+                        })
+                    print("hackatime projects data:", data)
+                else:
+                    projects=[]
+                    print(f"Status Code {response.status_code} Fetching Hackatime Projects")
+                    print(f"Response: {response.text}")
         
         except Exception as e:
             print(f"Error Fetching Hackatime Projects {e}")
         
     saved_projects = Project.query.filter_by(user_id=user.id).all()
+    print("Projects to send to html:", projects)
     return render_template(
         "dashboard.html",
         user=user,
@@ -130,28 +144,40 @@ def dashboard():
 @app.route("/api/project-hours", methods=['GET'])  
 def get_project_hours():
     user_id = session.get('user_id')
-    project_name = request.args.get('project-name')
-    if not user_id or not project_name:
-        return flask.jsonify({'error': "Missing user or project name"}), 400
+    if not user_id:
+        return flask.jsonify({'error' : 'Unauthorized'}), 401
     user = User.query.get(user_id)
-    if not user or not user.hackatime_username:
-        return flask.jsonify({'error' : "Hackatime not connected"}), 404
+    if not user:
+        return flask.jsonify({'error': 'User not found'}), 404
     
-    encode_name = requests.utils.quote(project_name, safe="")
-    url = f"{HACKATIME_BASE_URL}/users/{user.slack_id}/projects/{encode_name}"
-    headers = autoconnectHackatime()
+    projectName = request.args.get('project_name')
+    if not projectName:
+        return flask.jsonify({'error': 'Missing project name'}), 400
+    
+    total_Seconds = 0
+    if user.slack_id:
+        try:
+            url = f"{HACKATIME_BASE_URL}/users/{user.slack_id}/stats?features=projects"
+            headers = autoconnectHackatime()
+            response = requests.get(url, headers=headers, timeout=5)
 
-    try: 
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            total_seconds = data.get('total_seconds', 0)
-            hours = round(total_seconds/3600, 2) if total_seconds else 0
-            return flask.jsonify({'hours': hours})
-        else:
-            return flask.jsonify({'error': f"Hackatime API Failed to fetch projects"}), 500
-    except requests.exceptions.RequestException:
-        return flask.jsonify({'error': "Failed to connect to Hakcatime API"}), 500
+            if response.status_code == 200:
+                data = response.json()
+                raw_projects = data.get("data", {}).get('projects', [])
+                if isinstance(raw_projects, list):
+                    for proj in raw_projects:
+                        if proj.get('name') == projectName:
+                            total_Seconds = proj.get('total_seconds', 0)
+                            break
+            else:
+                print(f"Status Code {response.status_code} Fetching Hackatime Projects")
+                print(f"Response: {response.text}")
+        
+        except Exception as e:
+            print(f"Error Fetching Hackatime Projects {e}")
+        
+    hours = total_Seconds / 3600
+    return flask.jsonify({"hours": hours}), 200
     
 @app.route("/api/add-project", methods=['POST'])
 def add_project_api():
