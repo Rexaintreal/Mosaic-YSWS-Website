@@ -1,171 +1,326 @@
 window.addEventListener("DOMContentLoaded", () => {
-    const hackProject = document.getElementById("hack-project");
-    const hoursDisplayOverlay = document.getElementById('project-hours');   
+    const addProjectBtn = document.getElementById("add-project-btn");
     const addProjectForm = document.getElementById("add-project-form");
-    const addProjectIcon = document.getElementById("icon");
-    const addProjectOverlay = document.getElementById("add-project");
+    const overlay = document.getElementById("overlay");
     const closeOverlay = document.getElementById("close-overlay");
-    const mainOverlay = document.getElementById("overlay"); 
+    const hackProject = document.getElementById("hack-project");
+    const hoursPreview = document.getElementById("project-hours");
+    const screenshotInput = document.getElementById("screenshot-url");
+    const screenshotPreview = document.getElementById("screenshot-preview");
 
-    async function fetchProjectHours(projectBox){
-        const projectNameElem = projectBox.querySelector(".open");
-        const hoursDisplay = projectBox.querySelector(".hours-display");
-        let projectName = projectBox.getAttribute('data-hackatime-project');
-        if (!projectName || !hoursDisplay) {
-            hoursDisplay.textContent = "No project selected.";
-            return;
-        };
-        projectName = projectName.trim();
-        hoursDisplay.textContent = "Fetching hours...";
+    const detailsOverlay = document.getElementById("project-details-overlay");
+    const closeDetails = document.getElementById("close-details");
+    const submitOverlay = document.getElementById("submit-overlay");
+    const closeSubmit = document.getElementById("close-submit");
+    const submitForm = document.getElementById("submit-project-form");
+
+    function initializeChart() {
+        const canvas = document.getElementById('hours-chart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const weeklyDataStr = canvas.getAttribute('data-weekly');
+        let weeklyData=[];
+
         try {
-            const params = new URLSearchParams({ 'project_name': projectName });
-            const response = await fetch('/api/project-hours?' + params.toString());
-            const data = await response.json();
-            if (response.ok) {
-                hoursDisplay.textContent = 'Hours Spent: ' + ((data.hours ?? 0).toFixed(2)) + ' hr(s)';
-            } else {
-                hoursDisplay.textContent = 'Error: ' + (data.error || 'Could not fetch hours');
-            }
-        } catch (e){
-            hoursDisplay.textContent = 'Error fetching hours';
-            console.error(e);
+            weeklyData= JSON.parse(weeklyDataStr);
+        } catch (e) {
+            console.console.error('Error Parsing weekly data: ', e);
+            return;
         }
-    }
-    const projectBoxes = document.querySelectorAll(".project-box");
-    for (const box of projectBoxes){
-        fetchProjectHours(box);
-    }
-    document.querySelectorAll('.review-status, .shipped-status').forEach(checkbox => {
-        checkbox.addEventListener('click', (e) => e.preventDefault())
-    });
-    document.querySelectorAll('.open').forEach(openButton => {
-        const projectBox = openButton.closest('.project-box');
-        const hiddenDetails = projectBox ? projectBox.querySelector('.hidden') : null;
-        if (!projectBox || !hiddenDetails) return;
-        let isOpen = false;
-        openButton.addEventListener('click', ()=> {
-            if (!isOpen) {
-                hiddenDetails.style.display = 'block';
-                projectBox.style.height = '150px';
-                fetchProjectHours(projectBox);
-            } else {
-                hiddenDetails.style.display = 'none';
-                projectBox.style.height = '30px';
+        const labels = weeklyData.map(d=>d.day);
+        const hours = weeklyData.map(d=>d.hours);
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Hours',
+                    data: hours,
+                    backgroundColor: 'rgba(42, 157, 143, 0.6)',
+                    borderColor: 'rgba(42, 157, 143, 1)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y:{
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
             }
-            projectBox.style.transition = 'all 0.3s ease';
-            isOpen = !isOpen;
         });
-    });
-    hackProject?.addEventListener("change", async()=>{
-        const projectName = hackProject.value;
-        if (!hoursDisplayOverlay) return;
-        if (!projectName){
-            hoursDisplayOverlay.textContent = "Please select a project.";
+    }
+    function resetAddForm(){
+        addProjectForm.reset();
+        hoursPreview.textContent="";
+    }
+    window.openSubmitForm = function(projectId){
+        document.getElementById("submit-project-id").value = projectId;
+        detailsOverlay.classList.add("hidden");
+        submitOverlay.classList.remove("hidden");
+    };
+    async function showProjectDetails(projectId) {
+        try {
+            const response = await fetch (`/api/project-detials/${projectId}`);
+            const project = await response.json();
+
+            if (!reponse.ok){
+                alert('Error Loading Project Details');
+                return;
+            }
+            const detailsHTML = `
+            <h2>${project.name}</h2>
+            <div class="details-grid">
+                <div class="details-section">
+                    <h3>Project Information</h3>
+                    <p><strong>Description:</strong>${project.detail || 'No Description' }}</p>>
+                    ${project.theme ? `<p><strong>Theme:</strong> <span class="theme-tag">${project.theme}</span></p> `: ''}
+                    ${project.languages ? `<p><strong>Languages:</strong> ${project.languages}` : ''}
+                </div>
+                
+                <div class="details-section">
+                    <h3>Hours Tracking</h3>
+                    <table class="hours-table">
+                        <tr>
+                            <td>Raw Hours(Hackatime):</td>
+                            <td>${project.raw_hours} hrs <td>
+                        </tr>
+                        <tr>
+                            <td>Approved Hours:</td>
+                            <td>${project.approved_hours} hrs</td>
+                        </tr>
+                    </table>
+                </div>
+                ${project.summary ? `
+                    <div class="details-section">
+                        <h3>Project Summary</h3>
+                        <p>${project.summary}</p>
+                    </div>
+                ` : ''}
+                ${project.screenshot_url || project.github_url || project.demo_url ? `
+                    <div class="details-section">
+                        <h3>Links</h3>
+                        ${project.screenshot_url ? `<p><a href="${project.screenshot_url}" target="_blank"> View Screenshot</a></p>` : '' }
+                        ${project.github_url ? `<p><a href="${project.github_url}" target="_blank">Github Repository</a></p>` : ''}
+                        ${project.demo_url ? `<p><a href="${project.demo_url}" target="_blank">Live Demo</a></p>`: ""}
+                    </div>
+                    `:''}
+                ${project.comments && projects.comments.length > 0 ? `
+                    <div class="details-section">
+                        <h3>Admin Comments</h3>
+                        <div class="comment-list">
+                            ${project.comments.map(comment=>`
+                                    <div class="comment-ticket">
+                                        <div class="comment-author">${comment.admin_name}</div>
+                                        <div class="comment-date">${comment.created_at}</div>
+                                        <div class="comment-text">${comment.comment}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    ${project.status == 'draft' ? `
+                        <button class="btn-primary" onclick="openSubmitForm(${projectId})">Submit for Review</button>
+                        `: ''}
+                `;
+
+                document.getElementById("project-details-content").innerHTML = detailsHTML;
+                detailsOverlay.classList.remove("hidden");
+        } catch (e){
+            alert("Error Loading project details");
+            console.error(e)
+        }  
+    }
+    async function fetchProjectHours(projectCard) {
+        const hoursDisplay = projectCard.querySelector(".hours-display");
+        let projectName = projectCard.dataset.hackatimeProject;
+
+        if (!projectName || !hoursDisplay){
+            if (hoursDisplay) hoursDisplay.textContent = "No project linked";
             return;
         }
-        hoursDisplayOverlay.textContent = "Fetching hours...";
+        projectName = projectName.trim();
+        hoursDisplay.textContent="Fetching...";
+
         try {
-            const params = new URLSearchParams({ project_name: projectName });
-            const response = await fetch('/api/project-hours?' + params.toString());
+            const params= new URLSearchParams({'project-name': projectName});
+            const reponse = await fetch('/api/project-hours?' + params.toString());
             const data = await response.json();
-            hoursDisplayOverlay.textContent = response.ok
-                ? 'Hours Spent: ' + ((data.hours ?? 0).toFixed(2)) + ' hr(s)'
-                : 'Error: ' + (data.error || 'Could not fetch hours');
+
+            if (reponse.ok){
+                hoursDisplay.textContent = `${(data.hours ?? 0).toFixed(2)} hrs`;
+            } else {
+                hoursDisplay.textContent= 'Error';
+            }
         } catch (e){
-            hoursDisplayOverlay.textContent = 'Error fetching hours';
+            hoursDisplay.textContent = 'Error';
             console.error(e);
         }
-    });
-    function resetOverlay(){
-        addProjectForm.reset();
-        if (hackProject) hackProject.value = "";
-        if (hoursDisplayOverlay) hoursDisplayOverlay.textContent = "No Project Selected";
     }
-    function overlayClickClose(e){
-        if (e.target === mainOverlay){
-            addProjectOverlay.style.display = "none";
-            mainOverlay.style.display = "none";
-            mainOverlay.removeEventListener("click", overlayClickClose);
-            resetOverlay();
+    submitForm?.addEventListener("submit", async(e)=>{
+        e.preventDefault();
+        const projectId = document.getElementById("submit-project-id").value;
+        const screenshortUrl = document.getElementById("screenshot-url").value;
+        const githubUrl = document.getElementById("github-url").value;
+        const demoUrl = document.getElementById("demo-url").value;
+        const languages = document.getElementById("languages").value;
+        const summary = document.getElementById("summary").value;
+        try {
+            const reponse = await fetch(`/api/submit-project/${projectId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    screenshort_url: screenshortUrl,
+                    github_url: githubUrl,
+                    demo_url: demoUrl,
+                    languages: languages,
+                    summary: summary,
+                })
+            });
+            if (reponse.ok) {
+                alert('Project Submitted Successsfully!')
+                submitOverlay.classList.add("hidden");
+                detailsOverlay.classList.add("hidden");
+                location.reload();
+            } else {
+                const err = await response.json();
+                alert('Error: ' + (err.error || 'Could not be submitted!'));
+            }
+        } catch (e){
+            alert("Error submitting project!");
+            console.error(e)
         }
-    }
-    addProjectIcon?.addEventListener("click", ()=>{
-        addProjectOverlay.style.display = "block";
-        mainOverlay.style.display = "block";
-        mainOverlay.addEventListener("click", overlayClickClose);
-    });
-    closeOverlay?.addEventListener("click", ()=>{
-        addProjectOverlay.style.display = "none";
-        mainOverlay.style.display = "none";
-        mainOverlay.removeEventListener("click", overlayClickClose);
-        resetOverlay();
     });
     addProjectForm?.addEventListener("submit", async(e)=>{
         e.preventDefault();
-        const projectNameInput = document.getElementById("project-name");
-        const project_name = projectNameInput.value.trim();
-        const project_detail = document.getElementById("project-detail").value;
+        const projectName = document.getElementById("project-name").value.trim();
+        const projectDetail = document.getElementById("project-detail").value;
         const hackProjectValue = document.getElementById("hack-project").value;
-        if (!project_name){
-            alert("Project name cannot be empty.");
+        if (!projectName){
+            alert("Project name cannot be empty");
             return;
         }
         try {
-            const response = await fetch('/api/add-project', {
+            const response = await fetch ('/api/add-proect', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    name: project_name,
-                    detail: project_detail,
+                    name: projectName,
+                    detail: projectDetail,
                     hack_project: hackProjectValue
                 })
             });
-            if (!response.ok) {
-                const err = await response.json();
-                alert('Error adding project: ' + (err.error || 'Unknown error'));
+            if (!reponse.ok){
+                const err = await reponse.json();
+                alert('Error Adding Project: '+ (err.error || 'Unknown Error'));
                 return;
             }
-            const projectBox = document.createElement("div");
-            projectBox.className = "project-box";
-            projectBox.setAttribute('data-hackatime-project', hackProjectValue);
-            projectBox.innerHTML = `
-                <p class="open">${project_name}</p>
-                <div class="hidden">
-                    <p class="hours-display">Hours spent: 0 hr(s)</p>
-                    <p id="detail"><span style="font-style: italic;">${project_detail || 'No Description'}</span></p>
-                    <input type="checkbox" value="review" name="review"  class="review-status">
-                    <label for="checkbox">In Review</label>
-                    <input type="checkbox" value="shipped" class="last-part shipped-status"> 
-                    <label for="checkbox">Shipped</label>
-                </div>
+            const newProject = await reponse.json();
+            const projectsGrid = document.getElementById("projects-grid");
+            const projectCard = document.createElement("div");
+            projectCard.className = "project-card";
+            projectCard.dataset.projectId=newProject.id;
+            projectCard.dataset.hackatimeProject = newProject.hackatime_project;
+            projectCard.innerHTML = `
+            <div class="project-card-header">
+                <h3>${newProject.name}</h3>
+                <span class="status-badge status-draft">Draft</span>
+            </div>
+            <p class="project-description">${newProject.detail || 'No Description'}</p>
+            <div class="project-card-footer">
+                <span class="hours-display">Fetching hours...</span>
+                <button class="view-details-btn">View Details</button>
+            </div>
             `;
-            document.getElementById("line3").appendChild(projectBox);
-            const openButton = projectBox.querySelector('.open');
-            const hiddenDetails = projectBox.querySelector('.hidden');
-            let isOpen = true;
-            openButton.addEventListener('click', ()=> {
-                if (!isOpen) {
-                    hiddenDetails.style.display = 'block';
-                    projectBox.style.height = '150px';
-                    fetchProjectHours(projectBox);
-                } else {
-                    hiddenDetails.style.display = 'none';
-                    projectBox.style.height = '30px';
-                }
-                projectBox.style.transition = 'all 0.3s ease';
-                isOpen = !isOpen;
+            projectsGrid.appendChild(projectCard);
+            fetchProjectHours(projectCard);
+            projectCard.addEventListener("click", ()=>{
+                showProjectDetails(newProject.id);
             });
-            fetchProjectHours(projectBox);
-            projectBox.querySelectorAll('.review-status, .shipped-status').forEach(checkbox => {
-                checkbox.addEventListener('click', (e) => e.preventDefault())
-            });
-            addProjectOverlay.style.display = "none";
-            mainOverlay.style.display = "none";
-            mainOverlay.removeEventListener("click", overlayClickClose);
-            resetOverlay();
+            overlay.classList.add("hidden");
+            resetAddForm();
         } catch (e){
             alert('Error adding project.');
             console.error(e);
         }
     });
+    screenshotInput?.addEventListener("input", ()=>{
+        const ulr = screenshotInput.value;
+        if (url) {
+            screenshotPreview.innerHTML = `<img src=${url} alt="Screenshot preview" onerror="this.style.display='none'>`;
+        } else {
+            screenshotPreview.innerHTML="";
+        }
+    });
+    hackProject?.addEventListener("change", async()=>{
+        const projectName=hackProject.value;
+        if (!projectName) {
+            hoursPreview.textContent = '';
+            return;
+        }
+        hoursPreview.textContent="Fetching hours...";
+        try {
+            const params = new URLSearchParams({project_name: projectName});
+            const response = await fetch('/api/project-hours?' + params.toString());
+            const data = await response.json();
+            if (reponse.ok) {
+                hoursPreview.textContent = `Hours Spent: ${(data.hours ?? 0).toFixed(2)} hr(s)`;
+            } else {
+                hoursPreview.textContent = 'Error: ' + (data.error || 'Could not fetch hours');
+            }
+        } catch (e) {
+            hoursPreview.textContent = "Error fetching hours";
+            console.error(e);
+        }
+    });
+    submitOverlay?.addEventListener("click", (e)=>{
+        if (e.target==submitOverlay){
+            submitOverlay.classList.add("hidden");
+        }
+    });
+    closeSubmit?.addEventListener("click", ()=>{
+        submitOverlay.classList.add("hidden");
+    });
+    detailsOverlay?.addEventListener("click", (e)=>{
+        if (e.target==detailsOverlay){
+            detailsOverlay.classList.add("hidden");
+        }
+    });
+    closeDetails?.addEventListener("click", ()=>{
+        detailsOverlay.classList.add("hidden");
+    });
+    overlay?.addEventListener("click", (e)=>{
+        if (e.target==overlay){
+            overlay.classList.add("hidden");
+            resetAddForm();
+        }
+    });
+    closeOverlay?.addEventListener("click", ()=>{
+        overlay.classList.add("hidden");
+        resetAddForm();
+    });
+    addProjectBtn?.addEventListener("click", ()=>{
+        overlay.classList.remove("hidden");
+    });
+    const projectCards = document.querySelectorAll(".project-card");
+    projectCards.forEach(card => {
+        fetchProjectHours(card);
+        card.addEventListener("click", ()=>{
+            const projectId = card.dataset.projectId;
+            showProjectDetails(projectId)
+        });
+    });
+    initializeChart();
 });

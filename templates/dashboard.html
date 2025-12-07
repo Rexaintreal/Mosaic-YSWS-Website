@@ -14,8 +14,8 @@
     3. Add project - DONE
         3i. add project button in center - DONE
         3ii. Overlay to add project name and details - DONE
-        3iii. Submission System
-        3iv. Admin review system
+        3iii. Submission System - PYTHON DONE
+        3iv. Admin review system - PYTHON DONE
     4. Leaderboard Draft
     5. Shop System Draft (rather have a in progress banner 😭)
     6. Profile Settings
@@ -35,6 +35,9 @@
             <p class="nav-part">My Profile</p>
             <p class="nav-part">Shop</p>
             <p class="nav-part">My Stats</p>
+            {% if is_admin %}
+            <p class="nav-part admin-link" onclick="window.location.href='/admin/dashboard'">Admin Panel</p>
+            {% endif %}
         </div> 
         <div id="part2">
             <p>MOSAIC</p>
@@ -47,7 +50,162 @@
     <div id="overlay">
         
     </div>
-    <div id="page">
+    <div id="dashboard-container">
+        <div id="left-panel">
+            <div id="project-section">
+                <div class="project-header">
+                    <h2>Your Projects</h2>
+                    <button id="add-project-btn" class="icon-btn">
+                        <span class="material-symbols-outlined">add</span>
+                    </button>
+                </div>
+                {% if not auto_connected %}
+                <div class="alert-box">
+                    <p>Hackatime Auto-connect Failed! Message @the space man on slack!</p>
+                </div>
+                {% else %}
+                <div class="success-box">
+                    <p>Connected to Hackatime</p>
+                </div>
+                {% endif %}
+                <div id="projects-list">
+                    {% for sp in saved_projects %}
+                    <div class="project-box" data-project-id = "{{sp.hackatime_project}}" data-hackatime-project="{{ sp.hackatime_project }}">
+                        <div class="project-card-header">
+                            <h3>{{sp.name}}</h3>
+                            <span class="status-badge status-{{ sp.status }}">{{ sp.status.replace('_', '').title()}}</span>
+                        </div>
+                        {% if sp.theme %}
+                        <span class="theme-tag">{{ sp.theme }}</span>
+                        {% endif %}
+                        <div class="project-card-footer">
+                            <div class="hours-display">Fetching hours...</div>
+                            <button class="view-details-btn">View Details</button>
+                        </div>
+                    </div>
+                    {% endfor%}
+            </div>
+        </div>
+    </div>
+    <div id="right-panel">
+        <div id="stats">
+            <h2>Your Statistics</h2>
+            <div class="stat-card">
+                <div id="stat-icon">⏳</div>
+                <div id="stat-content">
+                    <h3>Total Hours</h3>
+                    <p class="stat-value">{{ stats.total_hours }}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-content">
+                    <h3>Current Streak (Hackatime)</h3>
+                    <p class="stat-value">{{ stats.streak }}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-content">
+                    <h3>Projects Completed</h3>
+                    <p class="stat-value">{{ stats.completed_projects }}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div class="stat-content">
+                    <h3>Projects In Review</h3>
+                    <p class="stat-value">{{ stats.in_review_projects }}</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3>Statistics</h3>
+                    <!--Plan for this:
+                    1. Hours Chart
+                    2. -->
+                    <canvas id="hours-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="overlay" class="overlay hidden">
+        <div class="overlay-content">
+            <h2>Add Project</h2>
+            <form id="add-project-form">
+                <div class="form-group">
+                    <label for="project-name">Project Name *</label>
+                    <input type="text" id="project-name" name="project-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="hack-project">Hackatime Project:</label>
+                    <select id="hack-project" name="hack-project" class="custom-select">
+                        <option value="">None / Choose a Hackatime Project</option>
+                        {% if auto_connected and projects %}
+                            {% for project in projects %}
+                                <option value="{{ project['name']}}">{{ project['name']}}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <p id="project-hours" class="hours-preview"></p>
+
+                <div class="form-group">
+                    <p class="project-detail">One Liner Description Please *</p>
+                    <input type="text" id="project-detail" name="project-detail" placeholder="Brief One-line detail!">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Add Project</button>
+                    <button type="button" id="close-overlay" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="project-details-overlay" class="overlay hidden">
+       <div class="overlay-content large">
+            <button class="close-btn" id="close-details">&times;</button>
+            <div id="project-details-content">
+                <!-- Handled by JS -->
+            </div>
+       </div>
+    </div>
+    
+    <div id="submit-overlay">
+        <div class="overlay-content">
+            <h2>Submit Project for Review</h2>
+            <form id="submit-project-form">
+                <input type="hidden" id="submit-project-id">
+                <div class="form-group">
+                    <label for="submission-link">Image Link (via #cdn on Slack!): *</label>
+                    <input type="url" id="screenshot-url" name="screenshot-url" required>
+                    <div id="screenshot-preview" class="image-preview"></div>
+                </div>
+                <div class="form-group">
+                    <label for="github-url">Github Link (please set to Public): *</label>
+                    <input type="url" id="github-url" name="github-url" required>
+                </div>
+                <div class="form-group">
+                    <label for="demo-url">Demo Link (please ensure it works!): *</label>
+                    <input type="url" id="demo-url" name="demo-url" required>
+                </div>
+                <div class="form-group">
+                    <label for="languages">Github Link (please set to Public): *</label>
+                    <input type="url" id="languages" name="languages" required placeholder="e.g. Python, Javascript, HTML, CSS, JS etc. ">
+                </div>
+                <div class="form-group">
+                    <label for="summary">Project Summary *</label>
+                    <textarea type="text" id="summary" name="summary" required placeholder="Explain what your project does and what you learnt..." rows="4"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="btn-primary">Submit Button for Review</button>
+                    <button type="buton" id="close-submit">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!--<div id="page">
         <div id="project-add">
             <div id="line1">
                 <p>Your Projects</p>
@@ -101,7 +259,8 @@
             </div>
         </div>
     </div>
-
+-->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js')}}"></script>
 </body>
 </html>
