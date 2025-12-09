@@ -24,7 +24,7 @@ window.addEventListener("DOMContentLoaded", () => {
         try {
             weeklyData= JSON.parse(weeklyDataStr);
         } catch (e) {
-            console.console.error('Error Parsing weekly data: ', e);
+            console.error('Error Parsing weekly data: ', e);
             return;
         }
         const labels = weeklyData.map(d=>d.day);
@@ -71,10 +71,10 @@ window.addEventListener("DOMContentLoaded", () => {
     };
     async function showProjectDetails(projectId) {
         try {
-            const response = await fetch (`/api/project-detials/${projectId}`);
+            const response = await fetch (`/api/project-details/${projectId}`);
             const project = await response.json();
 
-            if (!reponse.ok){
+            if (!response.ok){
                 alert('Error Loading Project Details');
                 return;
             }
@@ -145,7 +145,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     async function fetchProjectHours(projectCard) {
         const hoursDisplay = projectCard.querySelector(".hours-display");
-        let projectName = projectCard.dataset.hackatimeProject;
+        let projectName = projectCard.getAttribute('data-hackatime-project')
 
         if (!projectName || !hoursDisplay){
             if (hoursDisplay) hoursDisplay.textContent = "No project linked";
@@ -156,10 +156,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
         try {
             const params= new URLSearchParams({'project-name': projectName});
-            const reponse = await fetch('/api/project-hours?' + params.toString());
+            const response = await fetch('/api/project-hours?' + params.toString());
             const data = await response.json();
 
-            if (reponse.ok){
+            if (response.ok){
                 hoursDisplay.textContent = `${(data.hours ?? 0).toFixed(2)} hrs`;
             } else {
                 hoursDisplay.textContent= 'Error';
@@ -178,7 +178,7 @@ window.addEventListener("DOMContentLoaded", () => {
         const languages = document.getElementById("languages").value;
         const summary = document.getElementById("summary").value;
         try {
-            const reponse = await fetch(`/api/submit-project/${projectId}`, {
+            const response = await fetch(`/api/submit-project/${projectId}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -189,7 +189,7 @@ window.addEventListener("DOMContentLoaded", () => {
                     summary: summary,
                 })
             });
-            if (reponse.ok) {
+            if (response.ok) {
                 alert('Project Submitted Successsfully!')
                 submitOverlay.classList.add("hidden");
                 detailsOverlay.classList.add("hidden");
@@ -213,7 +213,7 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
         try {
-            const response = await fetch ('/api/add-proect', {
+            const response = await fetch ('/api/add-project', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -222,17 +222,17 @@ window.addEventListener("DOMContentLoaded", () => {
                     hack_project: hackProjectValue
                 })
             });
-            if (!reponse.ok){
-                const err = await reponse.json();
+            if (!response.ok){
+                const err = await response.json();
                 alert('Error Adding Project: '+ (err.error || 'Unknown Error'));
                 return;
             }
-            const newProject = await reponse.json();
+            const newProject = await response.json();
             const projectsGrid = document.getElementById("projects-grid");
             const projectCard = document.createElement("div");
             projectCard.className = "project-card";
             projectCard.dataset.projectId=newProject.id;
-            projectCard.dataset.hackatimeProject = newProject.hackatime_project;
+            projectCard.setAttribute('data-hackatime-project', newProject.hackatimeProject || '')
             projectCard.innerHTML = `
             <div class="project-card-header">
                 <h3>${newProject.name}</h3>
@@ -257,9 +257,9 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     });
     screenshotInput?.addEventListener("input", ()=>{
-        const ulr = screenshotInput.value;
+        const url = screenshotInput.value;
         if (url) {
-            screenshotPreview.innerHTML = `<img src=${url} alt="Screenshot preview" onerror="this.style.display='none'>`;
+            screenshotPreview.innerHTML = `<img src="${url}" alt="Screenshot preview" onerror="this.style.display='none'>`;
         } else {
             screenshotPreview.innerHTML="";
         }
@@ -275,7 +275,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const params = new URLSearchParams({project_name: projectName});
             const response = await fetch('/api/project-hours?' + params.toString());
             const data = await response.json();
-            if (reponse.ok) {
+            if (response.ok) {
                 hoursPreview.textContent = `Hours Spent: ${(data.hours ?? 0).toFixed(2)} hr(s)`;
             } else {
                 hoursPreview.textContent = 'Error: ' + (data.error || 'Could not fetch hours');

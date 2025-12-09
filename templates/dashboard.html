@@ -47,9 +47,6 @@
         <img src="https://hc-cdn.hel1.your-objectstorage.com/s/v3/6744b79e66c6963e94189a886b7bfe544e75135f_websitedecor_2_.png" id="img2">
     </div>
     <!--Projects Page-->
-    <div id="overlay">
-        
-    </div>
     <div id="dashboard-container">
         <div id="left-panel">
             <div id="project-section">
@@ -68,13 +65,14 @@
                     <p>Connected to Hackatime</p>
                 </div>
                 {% endif %}
-                <div id="projects-list">
+                <div id="projects-grid">
                     {% for sp in saved_projects %}
-                    <div class="project-box" data-project-id = "{{sp.hackatime_project}}" data-hackatime-project="{{ sp.hackatime_project }}">
+                    <div class="project-card" data-project-id = "{{sp.id}}" data-hackatime-project="{{sp.hackatime_project}}">
                         <div class="project-card-header">
                             <h3>{{sp.name}}</h3>
                             <span class="status-badge status-{{ sp.status }}">{{ sp.status.replace('_', '').title()}}</span>
                         </div>
+                        <p class="project-description">{{ sp.detail or 'No Description'}}</p>
                         {% if sp.theme %}
                         <span class="theme-tag">{{ sp.theme }}</span>
                         {% endif %}
@@ -125,7 +123,7 @@
                     <!--Plan for this:
                     1. Hours Chart
                     2. -->
-                    <canvas id="hours-chart"></canvas>
+                    <canvas id="hours-chart" data-weekly="{{stats.weekly_hours | tojson }}"></canvas>
                 </div>
             </div>
         </div>
@@ -172,7 +170,7 @@
        </div>
     </div>
     
-    <div id="submit-overlay">
+    <div id="submit-overlay" class="overlay hidden">
         <div class="overlay-content">
             <h2>Submit Project for Review</h2>
             <form id="submit-project-form">

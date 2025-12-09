@@ -18,6 +18,7 @@ body{
     font-family: 'Momo Trust Display', sans-serif;
     overflow-x: hidden;
 }
+/*NAVBAR*/
 #navbar{
     display: flex;
     flex-direction: row;
@@ -63,6 +64,7 @@ body{
     color: var(--dark-grey);
     font-weight: bold;
 }
+/*Dashboard Container*/
 #dashboard-container{
     display: flex;
     gap: 30px;
@@ -81,13 +83,16 @@ body{
     min-width: 300px;
     max-width: 400px;
 }
-.section-header{
+/*XYZ Headers*/
+.section-header,
+.project-header{
     display: flex;
-    justify-content: space-ber;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
 }
-.section-header h2{
+.section-header h2,
+.project-header h2{
     margin: 0;
     font-size: 28px;
     color: var(--dark-grey);
@@ -103,6 +108,7 @@ body{
     justify-content: center;
     cursor: pointer;
     transition: all 4px 8px rgba(0,0,0, 0.2);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 .icon-btn:hover {
     transform: scale(1.1); 
@@ -110,8 +116,9 @@ body{
 }
 .icon-btn .material-symbols-outlined {
     color: var(--honeydew);
-    font-size: 32ps;
+    font-size: 32px;
 }
+/*Alert box!!*/
 .alert-box, .success-box {
     padding: 15px;
     border-radius: 10px;
@@ -275,7 +282,7 @@ body{
 .overlay{
     position: fixed;
     inset: 0;
-    background-color: black;
+    background-color: rgba(0, 0, 0, 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -476,5 +483,8 @@ body{
 .comment-text {
     color: var(--dark-grey);
     line-height: 1.6;
+}
+.hidden{
+    display: none;
 }
 /*Need to add screen dependent design*/

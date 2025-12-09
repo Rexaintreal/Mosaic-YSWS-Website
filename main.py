@@ -94,7 +94,7 @@ def is_admin(user):
 @app.route('/signin', methods=['GET', 'POST'])
 def signin():
     client_id = os.getenv('CLIENT_ID')
-    redirect_uri = "https://mosaic.conduit.ws/slack/callback"
+    redirect_uri = "https://mosaic-ysws.conduit.ws/slack/callback"
     redirect_url= f"https://slack.com/oauth/v2/authorize?client_id={client_id}&scope=users:read&user_scope=identity.basic&redirect_uri={redirect_uri}"
     slack_auth_url = redirect_url
     return render_template('signin.html', slack_auth_url=slack_auth_url)
@@ -107,7 +107,7 @@ def callback():
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET'),
         "code": code,
-        "redirect_uri": "https://mosaic.conduit.ws/slack/callback"
+        "redirect_uri": "https://mosaic-ysws.conduit.ws/slack/callback"
     }
     response = requests.post("https://slack.com/api/oauth.v2.access", data=payload)
     data = response.json()
@@ -193,7 +193,7 @@ def get_user_stats(user):
         response = requests.get(url, headers=headers, timeout=5)
 
         if response.status_code == 200:
-            data = response.json
+            data = response.json()
             stats['total_hours'] = round(data.get('data', {}).get('total_seconds', 0)/3600, 2)
 
         streak_url = f"{HACKATIME_BASE_URL}/authenticated/streak"
@@ -204,11 +204,11 @@ def get_user_stats(user):
 
         weekly_data = []
         for i in range(6, -1, -1):
-            data=datetime.now() - timedelta(days=i)
+            date=datetime.now() - timedelta(days=i)
             date_str=date.strftime('%Y-%m-%d')
 
-            spans_url = f"{HACKATIME_BASE_URL}/users/{user.slack_id}/hearbeats/spans?date={date_str}"
-            spans_response = request.get(spans_url, headers=headers,timeout = 5)
+            spans_url = f"{HACKATIME_BASE_URL}/users/{user.slack_id}/heartbeats/spans?date={date_str}"
+            spans_response = requests.get(spans_url, headers=headers,timeout = 5)
             day_hours = 0
             if spans_response.status_code == 200:
                 spans_data = spans_response.json()
@@ -216,17 +216,18 @@ def get_user_stats(user):
                 day_hours = round(total_seconds /3600, 2)
 
             weekly_data.append({
-                'day': data.strftime('%a'),
+                'day': date.strftime('%a'),
                 'hours': day_hours
             })
-            stats['weekly_hours'] = weekly_data
-            stats['completed_projects'] = Project.query.filter_by(user_id=user.id, status='approved').count()
-            stats['in_review_projects'] = Project.query.filter_by(user_id=user.id, status='in_review').count()
+        stats['weekly_hours'] = weekly_data
+        stats['completed_projects'] = Project.query.filter_by(user_id=user.id, status='approved').count()
+        stats['in_review_projects'] = Project.query.filter_by(user_id=user.id, status='in_review').count()
         
     except Exception as e:
         print(f"Error Fetching user stats: {e}")
 
     return stats
+@app.route("/api/add-project", methods=['POST'])
 def add_project_api():
     user_id = session.get('user_id')
     if not user_id:
@@ -442,6 +443,35 @@ def admin_assign_project(project_id):
 def leaderboard():
     return render_template('leaderboard.html')
 
-
+@app.route('/api/project-hours', methods=['GET'])
+def get_project_hours():
+    user_id = session.get('user_id')
+    if not user_id:
+        return flask.jsonify({'Error': 'Unauthorised'}), 401
+    user = User.query.get(user_id)
+    if not user or not user.slack_id:
+        return flask.jsonify({'Error ': 'Not logged into Hackatime!'}),404
+    project_name =request.args.get('project-name') or request.args.get('project_name')
+    if not project_name:
+        return flask.jsonify({'Error': 'No Project Name'}), 400
+    
+    try: 
+        url = f'{HACKATIME_BASE_URL}/users/{user.slack_id}/stats?features=projects'
+        headers = autoconnectHackatime()
+        response = requests.get(url=url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            raw_projects = data.get("data", {}).get('projects', [])
+            for proj in raw_projects:
+                hours = proj.get('total_seconds', 0)/3600
+                return flask.jsonify({'hours' : round(hours, 2)}), 200
+            return flask.jsonify({'hours': 0, 'message': 'Project not Found'}), 200
+        else:
+            return flask.jsonify({'Error' : 'Failed to fetch from hackatime'}), 500
+        
+    except Exception as e:
+        print(f"Error fetching hours {e}")
+        return flask.jsonify({'Error': 'Internal Server Error'})
+    
 if __name__ == "__main__":
     app.run(port=3700, debug=True)
