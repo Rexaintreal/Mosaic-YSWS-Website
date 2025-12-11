@@ -101,7 +101,7 @@ def is_admin(user):
 @app.route('/signin', methods=['GET', 'POST'])
 def signin():
     client_id = os.getenv('CLIENT_ID')
-    redirect_uri = "https://mosaic-ysws.conduit.ws/slack/callback"
+    redirect_uri = "https://mosaic-ysws-website.vercel.app"
     redirect_url= f"https://slack.com/oauth/v2/authorize?client_id={client_id}&scope=users:read&user_scope=identity.basic&redirect_uri={redirect_uri}"
     slack_auth_url = redirect_url
     return render_template('signin.html', slack_auth_url=slack_auth_url)
@@ -114,7 +114,7 @@ def callback():
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET'),
         "code": code,
-        "redirect_uri": "https://mosaic-ysws.conduit.ws/slack/callback"
+        "redirect_uri": "https://mosaic-ysws-website.vercel.app"
     }
     response = requests.post("https://slack.com/api/oauth.v2.access", data=payload)
     data = response.json()
@@ -463,7 +463,7 @@ def leaderboard():
 
     for u in all_users:
         approved_projects = Project.query.filter_by(user_id=u.id, status='approved').all()
-        total_hours = sum(p.approived_hours for p in approved_projects)
+        total_hours = sum(p.approved_hours for p in approved_projects)
         if total_hours > 0:
             users_data.append({
                 'name': u.name or f'User #{u.id}',
@@ -481,7 +481,7 @@ def shop():
         return redirect('/signin')
     user = User.query.get(user_id)
     return render_template('shop.html', user=user)
-@app.route('/admin/api/award-tiless/<int:projet_id>', methods=['POST'])
+@app.route('/admin/api/award-tiles/<int:projet_id>', methods=['POST'])
 def admin_award_tiles(project_id):
     user_id = session.get('user_id')
     if not user_id:
