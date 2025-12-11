@@ -1,3 +1,21 @@
+async function loadActiveThemes(){
+    try {
+        const response = await fetch('/api/themes');
+        const data = await response.json();
+        if (data.themes && data.theme.length > 0){
+            const banner = document.getElementById('themes-banner');
+        }
+        data.themes.forEach(themes => {
+            const themeDiv = document.createElement('div');
+            themeDiv.className='theme-item';
+            themeDiv.innerHTML=`<strong>${theme.name}</strong>${theme.description ? ': ' + theme.description : ''}`;
+            banner.appendChild(themeDiv);
+        });
+        banner.classList.add('active');
+    } catch (e) {
+        console.error('Error loading themes: ', e);
+    }
+}
 window.addEventListener("DOMContentLoaded", () => {
     const addProjectBtn = document.getElementById("add-project-btn");
     const addProjectForm = document.getElementById("add-project-form");

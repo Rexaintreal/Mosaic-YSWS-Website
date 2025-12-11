@@ -486,3 +486,25 @@ body{
     display: none;
 }
 /*Need to add screen dependent design*/
+#themes-banner {
+    background: linear-gradient(135deg, var(--pine-green) 0%, var(--medium-jungle) 100%);
+    color: white;
+    padding: 20px 30px;
+    text-align: center;
+    font-size: bold;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: none;
+}
+#themes-banner.active{
+    display: block;
+}
+.theme-item{
+    margin: 10px 0;
+}
+.theme-item strong {
+    color: var(--royal-gold);
+}
+.stat-icon {
+    font-size: 32px;
+    margin-right: 15px;
+}

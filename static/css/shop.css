@@ -64,116 +64,88 @@ body{
     color: var(--dark-grey);
     font-weight: bold;
 }
-.leaderboard-container{
+.shop-container{
     max-width: 1200px;
     margin: 40px auto;
     padding: 0 30px;
     position: relative;
     z-index: 5;
 }
-.leaderboard-header{
+.shop-header {
     text-align: center;
     margin-bottom: 50px;
 }
-.leaderboard-header h1{
+.shop-header h1 {
     font-size: 30px;
     color: var(--dark-grey);
-    margin-bottom: 10px;
-}
-.leaderboard-header p{
-    font-size: 18px ;
-    color: #666;
-}
-.leaderboard-table{
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-.leaderboard-row{
-    background: white;
-    border-radius: 15px;
-    padding: 25px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    display: flex;
-    align-items: center;
-    gap: 25px;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-.leaderboard-row:hover{
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-}
-.leaderboard-row.rank-1{
-    border: 3px solid #FFD700;
-    background-color: linear-gradient(135deg, #fff9e6 0%, white 100%);
-}
-.leaderboard-row.rank-2{
-    border: 3px solid #C0C0C0;
-}
-.leaderboard-row.rank-3{
-    border: 3px solid #CD7F32;
-}
-.rank-badge {
-    font-size: 48px;
-    font-weight: bold;
-    min-width: 80px;
-    text-align: center;
-    color: var(--pine-green);
-}
-.user-info{
-    flex: 1;
-}
-.user-info h3 {
-    margin: 0 0 15px 0;
-    font-size: 28px;
-    color: var(--dark-grey);
-}
-.user-stats {
-    display: flex;
-    gap: 25px;
-    flex-wrap: wrap;
-}
-.stat-item{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 16px;
-    color: #666;
-}
-.stat-item .material-symbols.outlined {
-    font-size: 20px;
-    color: var(--pine-green);
-}
-.stat-item.tiles .material-symbols.outlined{
-    color: var(--royal-gold);
-}
-.progress-bar{
-    width: 200px;
-    height: 12px;
-    background-color: var(--light-grey);
-    border-radius: 10px;
-    overflow: hidden;
-}
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--pine-green) 0%, var(--medium-jungle) 100%);
-    border-radius: 10px;
-    transition: width 1s ease;
-}
-.empty-state{
-    text-align: center;
-    padding: 80px 20px;
-    color: #999;
-}
-.empty-state .material-symbols.outlined {
-    font-size: 100px;
-    color: var(--royal-gold);
     margin-bottom: 20px;
 }
-.empty-state p{
+.balance-display{
+    display: inline-flex;
+    align-items: center;
+    gap: 15px;
+    background-color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.balance-display {
+    font-size: 30px;
+    color: var(--royal-gold);
+}
+.materials-symbols-outlined{
+    font-size: 48px;
+}
+.balance-amount {
+    font-size: 30px;
+    font-weight: bold;
+    color: var(--dark-grey);
+}
+.balance-label{
     font-size: 24px;
+    color: #666;
+}
+.construction-banner {
+    background: white;
+    border-radius: 20px;
+    padding: 60px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    border: 4px dashed var(--royal-gold);
+}
+.construction-content{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+}
+.construction-icon {
+    font-size: 120px;
+    color: var(--royal-gold);
+    animation: rotate 2s linear infinite;
+}
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }    
+    to {
+        transform: rotate(360deg);
+    }
+}
+.construction-content h2{
+    font-size: 28px;
+    color: var(--dark-grey);
+    margin-bottom: 15px;
+}
+.construction-content p{
+    font-size: 20px;
+    color: #666;
+    margin: 10px 0;
+}
+.coming-soon {
+    font-weight: bold;
+    color: var(--pine-green);
+    margin-top: 20px;
 }
 #decor {
     position: fixed;
@@ -184,6 +156,7 @@ body{
     z-index: 1;
     pointer-events: none;
 }
+
 #img2 {
     position: absolute;
     right: 0;
@@ -192,4 +165,7 @@ body{
     height: 500px;
     object-fit: contain;
     opacity: 0.3;
+}
+#special{
+    transform: scale(2);
 }

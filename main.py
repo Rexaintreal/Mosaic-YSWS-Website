@@ -5,7 +5,7 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, request, render_template, redirect, session, url_for
+from flask import Flask, request, render_template, redirect, session, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
@@ -44,6 +44,7 @@ class User(db.Model, UserMixin):
     slack_id = db.Column(db.String(255), nullable=True, unique=True)
     hackatime_username = db.Column(db.String(255), nullable=True)
     slack_token = db.Column(db.String(255))
+    tiles_balance = db.Column(db.Integer, default=0)
 
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key = True)
@@ -81,6 +82,12 @@ class ProjectComment(db.Model):
     project = db.relationship('Project', backref=db.backref('comments', lazy=True))
     admin = db.relationship('User', foreign_keys=[admin_id])
 
+class Theme(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default = datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
 with app.app_context():
     db.create_all()
 
@@ -413,9 +420,6 @@ def admin_assign_project(project_id):
 
 
 
-@app.route('/leaderboard', methods=['GET', 'POST'])
-def leaderboard():
-    return render_template('leaderboard.html')
 
 @app.route('/api/project-hours', methods=['GET'])
 def get_project_hours():
@@ -447,6 +451,115 @@ def get_project_hours():
     except Exception as e:
         print(f"Error fetching hours {e}")
         return flask.jsonify({'Error': 'Internal Server Error'})
-    
+@app.route('/leaderboard')
+def leaderboard():
+    user_id = session.get('user_id')
+    user = None
+    if user_id:
+        user = User.query.get(user_id)
+
+    users_data = []
+    all_users = User.query.all()
+
+    for u in all_users:
+        approved_projects = Project.query.filter_by(user_id=u.id, status='approved').all()
+        total_hours = sum(p.approived_hours for p in approved_projects)
+        if total_hours > 0:
+            users_data.append({
+                'name': u.name or f'User #{u.id}',
+                'total_hours': round(total_hours, 2),
+                'projects_count': len(approved_projects),
+                'tiles': u.tiles_balance if hasattr(u, 'tiles_balance') else 0
+            })
+    users_data.sort(key=lambda x: x['total_hours'], reverse=True)
+
+    return render_template('leaderboard.html', leaderboard=users_data, user=user)
+@app.route('/shop')
+def shop():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect('/signin')
+    user = User.query.get(user_id)
+    return render_template('shop.html', user=user)
+@app.route('/admin/api/award-tiless/<int:projet_id>', methods=['POST'])
+def admin_award_tiles(project_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return flask.jsonify({'error': 'Unauthorized'}), 401
+    user = User.query.get(user_id)
+    if not is_admin(user):
+        return flask.jsonify({'error': 'Forbidden'}), 403
+    project=Project.query.get(project_id)
+    if not project:
+        return flask.jsonify({'error': 'Project not found'}), 404
+    data = request.get_json()
+    tiles_amount = int(data.get('tiles', 0))
+    if tiles_amount<=0:
+        return flask.jsonify({'error': 'Invalid tiles amount'}), 400
+    project_user = User.query.get(project.user_id)
+    if not hasattr(project_user, 'tiles_balance'):
+        project_user.tiles_balance = 0
+    project_user.tiles_balance += tiles_amount
+    db.session.commit()
+    return flask.jsonify({
+        'message': 'Tiles awarded successfully',
+        'new_balance': project_user.tiles_balance
+    }), 200
+
+@app.route('/admin/api/add-theme', methods=['POST'])
+def admin_add_theme():
+    user_id = session.get('user_id')
+    user = None
+    if not user_id:
+        return flask.jsonify({'error': 'Unauthorized'}), 401
+    user = User.query.get(user_id)
+    if not is_admin(user):
+        return flask.jsonify({'error': 'Forbidden'}), 403
+    data = request.get_json()
+    theme_name = data.get('name')
+    theme_description = data.get('description', '')
+    if not theme_name:
+        return flask.jsonify({'error': 'Theme name is requried'}), 400
+    new_theme = Theme(
+        name=theme_name,
+        description=theme_description,
+        is_active = True
+    )
+    db.session.add(new_theme)
+    db.session.commit()
+    return flask.jsonify({
+        'message': 'Theme added successsfully',
+        'theme': {
+            'id': new_theme.id,
+            'name': new_theme.name,
+            'description': new_theme.description
+        }
+    }), 201
+
+@app.route('/api/themes', methods=['GET'])
+def get_themes():
+    themes = Theme.query.filter_by(is_active=True).all()
+    return flask.jsonify({
+        'themes': [{
+            'id': t.id,
+            'name': t.name,
+            'description': t.description
+        } for t in themes]
+    }), 200
+
+@app.route('/admin/api/delete-theme/<int:theme_id>', methods=['DELETE'])
+def admin_delete_theme(theme_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return flask.jsonify({'error': 'Unauthorised'}), 401
+    user = User.query.get(user_id)
+    if not is_admin(user):
+        return flask.jsonify({'error': 'Forbidden'}), 403
+    theme = Theme.query.get(theme_id)
+    if not theme:
+        return flask.jsonify({'error': 'Theme not found'}), 404
+    theme.is_active = False
+    db.session.commit()
+    return flask.jsonify({'message': 'Theme deleted successfully'}), 200
 if __name__ == "__main__":
     app.run(port=3700, debug=True)

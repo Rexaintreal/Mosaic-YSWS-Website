@@ -3,37 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/leaderboard.css')}}">
     <title>Leaderboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/leaderboard.css')}}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
 </head>
 <body>
     <div id="navbar">
         <div id="part1">
-            <p class="nav-part">My Projects</p>
-            <p class="nav-part current">Leaderboard</p>
-            <p class="nav-part">My Profile</p>
-            <p class="nav-part">Shop</p>
-            <p class="nav-part">My Stats</p>
-        </div> 
-        <div id="part2">
-            <p>MOSAIC</p>
+            <p class="nav-part" onclick="window.location.href='/dashboard'">My Projects</p>
+            <p class="nav-part current">Leadearboard</p>
+            <p class="nav-part" onclick="window.location.href='/shop'">Shop</p>
+            {% if is_admin %}
+            <p class="nav-part admin-link" onclick="window.location.href='/admin/dashboard'">Admin Panel</p>
+            {% endif %}
         </div>
+        <div id="part2"><p>MOSAIC</p></div>
     </div>
-    <div id="leaderboard">
-        <!--STATIC LEADERBOARD-->
-        <h1>Leaderboard</h1>
-        <table>
-            <tr>
-                <th>User</th>
-                <th>Hours</th>
-                <th>Total Number of Tiles</th>
-            </tr>
-            <tr>
-                <td>User1</td>
-                <td>10</td>
-                <td>300</td>
-            </tr>
-        </table>
+
+    <div class="leaderboard-container">
+        <div class="leaderboard-header">
+            <h1>Leaderboard</h1>
+            <p>Top Builders raned by approved project hours</p>
+        </div>
+        {% if leaderboard %}
+        <div class="leaderboard-table">
+            {% for entry in leaderboard %}
+            <div class="leaderboard-row rank-{{loop.index}}">
+                <div class="rank-badge">
+                    {% if loop.index == 1 %}
+                    🥇
+                    {% elif loop.index == 2 %}
+                    🥈
+                    {% elif loop.index == 3 %}
+                    🥉
+                    {{ loop.index }}
+                    {% endif %}
+                </div>
+                <div class="user-info">
+                    <h3>{{entry.name}}</h3>
+                    <div class="user.stats">
+                        <span class="stat-item">
+                            <span class="material-symbols-outlined">schedule</span>
+                            {{entry.total_hours}} hrs
+                        </span>
+                        <span class="stat-item">
+                            <span class="material-symbols-outlined">folder</span>
+                            {{entry.projects_count}} projects
+                        </span>
+                        <span class="stat-item">
+                            {{entry.tiles}} tiles
+                        </span>
+                    </div>
+                </div>
+                
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No leaderboard data yet. Start building!</p>
+        </div>
+        {% endif %}
+    </div>
+    <div id="decor">
+        <img src="https://hc-cdn.hel1.your-objectstorage.com/s/v3/6744b79e66c6963e94189a886b7bfe544e75135f_websitedecor_2_.png" id="img2">
     </div>
 </body>
 </html>
