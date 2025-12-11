@@ -101,7 +101,7 @@ def is_admin(user):
 @app.route('/signin', methods=['GET', 'POST'])
 def signin():
     client_id = os.getenv('CLIENT_ID')
-    redirect_uri = "https://mosaic-ysws-website.vercel.app"
+    redirect_uri = "https://mosaic-ysws-website.vercel.app/slack/callback"
     redirect_url= f"https://slack.com/oauth/v2/authorize?client_id={client_id}&scope=users:read&user_scope=identity.basic&redirect_uri={redirect_uri}"
     slack_auth_url = redirect_url
     return render_template('signin.html', slack_auth_url=slack_auth_url)
@@ -114,7 +114,7 @@ def callback():
         "client_id": os.getenv('CLIENT_ID'),
         "client_secret": os.getenv('CLIENT_SECRET'),
         "code": code,
-        "redirect_uri": "https://mosaic-ysws-website.vercel.app"
+        "redirect_uri": "https://mosaic-ysws-website.vercel.app/slack/callback"
     }
     response = requests.post("https://slack.com/api/oauth.v2.access", data=payload)
     data = response.json()
