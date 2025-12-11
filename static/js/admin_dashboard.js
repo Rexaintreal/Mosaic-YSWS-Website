@@ -96,7 +96,10 @@ async function viewProject(projectId) {
                                 <label for="comment-${projectId}">Add Comment</label>
                                 <textarea id="comment-${projectId}" rows="4" placeholder="Leave feedback for the particpant..."></textarea>
                             </div>
-                            
+                            <div class="tiles-input-group">
+                                <input type="number" id="tiles-${projectId}" min="0" placeholder="Award tiles to participant" value="0">
+                                <button type="button" onclick="awardTiles(${projectId})">Award Tiles </button>
+                            </div>
                             <div class="form-actions">
                                 <button type="submit" class="btn-approve">Save Review</button>
                                 <button type="button" class="btn-reject" onclick="quickReject(${projectId})">Quick Reject</button>
@@ -112,7 +115,7 @@ async function viewProject(projectId) {
         console.error(e);
     }
 }
- async function submitReview(event, projectId) {
+async function submitReview(event, projectId) {
         event.preventDefault();
         const approvedHours = document.getElementById(`approved-hours-${projectId}`).value;
         const theme = document.getElementById(`theme-${projectId}`).value;
@@ -156,6 +159,32 @@ async function viewProject(projectId) {
             alert('Error submitting review');
             console.error(e);
         }
+}
+async function awardTiles(projectId) {
+    const tiles_amount = document.getElementById(`tiles-${projectId}`).value;
+    if (!tilesAmount || tilesAmount <= 0){
+        alert('Please enter a valid tiles amount');
+        return;
+    }
+    if (!confirm(`Award ${tilesAmount} tiles to this user?`)) return;
+    try {
+        const response = await fetch(`/admin/api/award-tiles/${projectId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tiles: parseInt(tilesAmount)})
+        });
+
+        if (response.ok){
+            const data = await response.json();
+            alert(`Tiles awarded! New Balance: ${data.new_balance}`);
+            document.getElementById(`tiles-${projectId}`).value=0;
+        } else {
+            alert('Error awarding tiles!');
+        }
+    } catch (e) {
+        alert('Error awarding tiles!');
+        console.error(e);
+    }
 }
 async function quickReject(projectId) {
     const comment = prompt('Please provide a reason for rejetion!');
@@ -206,11 +235,94 @@ async function assignToSelf(projectId) {
         console.error(e);
     }    
 }
+function openThemeModal(){
+    document.getElementById('theme-modal').classList.remove('hidden');
+}
+function closeThemeModal(){
+    document.getElementById('theme.modal').classList.add('hidden');
+    document.getElementById('theme-form').reset();
+}
+async function submitTheme(event){
+    event.preventDefault();
+    const name = document.getElementById('theme-name').value();
+    const description = document.getElementById('theme-description').value;
+    try {
+        const response = await fetch(`/admin/api/add-theme`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, description})
+        });
+        if (response.ok){
+            alert('Theme added successfully!');
+            closeThemeModal();
+            location.reload()
+        } else {
+            alert('Error adding theme!');
+        }
+    } catch(e){
+        alert('Error adding theme!');
+    }
+}
+async function manageThemes() {
+    try {
+        const response = await fetch('/api/themes');
+        const data = await response.json()
+        const themesList = document.getElementById('themes-list');
+        if (data.themes && data.themes.length > 0){
+            themesList.innerHTML = data.themes.map(theme => `
+                <div class="theme-list-item">
+                    <div>
+                        <h4>${theme.name}</h4>
+                        <p>${theme.description || 'No Description'}</p>
+                    </div>
+                    <button class="delete-theme-btn onclick="deleteTheme(${theme.id})">Delete Theme</button>
+                </div>
+                `).join('');
+        } else {
+            themesList.innerHTML=`<p style="text-align: center; color: #666;">No themes yet</p>`;
+        }
+        document.getElementById('themes-list-modal').classList.remove('hidden');
+    } catch (e){
+        alert('Error Loading themes');
+        console.error(e);
+    }
+}
+function closeThemesListModal(){
+    document.getElementById('themes-list-modal').classList.add('hidden');
+}
+async function deleteTheme(themeId) {
+    if (!confirm('Delete this theme?')) return;
+
+    try {
+        const response = await fetch(`/admin/api/delete-theme/${themeId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok){
+            alert('Theme deleted!');
+            manageThemes();
+        } else {
+            alert('Error deleting theme');
+        }
+    } catch (e){
+        alert('Error deleting theme');
+        console.error(e);
+    }
+}
 function closeReviewModal(){
     document.getElementById('review-modal').classList.add('hidden');
 }
 document.getElementById('review-modal')?.addEventListener('click', (e)=>{
     if (e.targetid === 'review-modal'){
         closeReviewModal()
+    }
+});
+document.getElementById('theme-modal')?.addEventListener('click', (e)=>{
+    if (e.targetid === 'theme-modal'){
+        closeThemeModal()
+    }
+});
+document.getElementById('themes-list-modal')?.addEventListener('click', (e)=>{
+    if (e.targetid === 'themes-list-modal'){
+        closeThemesListModal()
     }
 });

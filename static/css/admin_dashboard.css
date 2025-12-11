@@ -385,3 +385,123 @@ body {
     transform: translateY(-2px);
 }
 /*MEDIA STYLES TO COME*/
+.admin-actions{
+    display: flex;
+    gap: 15px;
+    margin-bottom: 30px;
+    justify-content: center;
+}
+.action-btn{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 30px;
+    background: var(--pine-green);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.action-btn:hover{
+    background-color: var(--medium-jungle);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+.action-btn .material-symbols-outlined{
+    font-size: 24px;
+}
+.stat-box{
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.stat-icon{
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.stat-icon{
+    font-size: 40px !important;
+    color: var(--pine-green);
+}
+.tiles-input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 15px;
+    padding: 16px;
+    background-color: var(--honeydew);
+    border-radius: 10px;
+}
+.tiles-input-group input {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid white;
+    border-radius: 8px;
+    font-size: 16px;
+}
+.tiles-input-group button {
+    padding: 10px 20px;
+    background-color: var(--royal-gold);
+    color:  var(--dark-gray);
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.tiles-input-group button:hover{
+    background-color: #f0c74b;
+    transform: scale(1.05);
+}
+.theme-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background-color: var(--honeydew);
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+.theme-list-item h4{
+    margin: 0 0 5px 0;
+    color: var(--dark-gray);
+}
+.theme-list-item p{
+    margin: 0;
+    color: gray;
+    font-size: 14px;
+}
+.delete-theme-btn{
+    padding: 8px 10px;
+    background-color: var(--punch-red);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.delete-theme-btn:hover{
+    background-color: #d62839;
+    transform: scale(1.05);
+}
+.btn-secondary{
+    flex: 1;
+    padding: 15px;
+    background: transparent;
+    color: var(--dark-gray);
+    border: 2px solid var(--light-gray);
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease ;
+}
+.btn-secondary:hover{
+    border-color: var(--dark-gray);
+    background: var(--light-gray);
+}
