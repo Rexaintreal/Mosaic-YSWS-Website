@@ -107,11 +107,11 @@ body{
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 4px 8px rgba(0,0,0, 0.2);
+    transition: all 0.3s ease-in-out;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 .icon-btn:hover {
-    transform: scale(1.1); 
+    transform: scale(1.1) rotate(90deg); 
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 .icon-btn .material-symbols-outlined {
@@ -147,10 +147,13 @@ body{
     transition: all 0.3s ease;
     cursor: pointer;
     border: 2px solid transparent;
+    position: relative;
+    overflow: hidden;
 }
 .project-card:hover{
     transform: translateY((-5px));
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    border-color: var(--pine-green);
 }
 .project-card-header{
     display: flex;
@@ -170,6 +173,7 @@ body{
     font-size: 12px;
     font-weight: bold;
     text-transform: uppercase;
+    border: 2px solid currentColor;
 }
 .status-draft {
     background-color: var(--light-grey);
@@ -201,6 +205,7 @@ body{
     border-radius: 15px;
     font-size: 12px;
     margin-bottom: 10px;
+    font-weight: 600;
 }
 .project-card-footer{
     display: flex;
@@ -224,9 +229,11 @@ body{
     cursor: pointer;
     font-size: 14px;
     transition: all 0.3s ease;
+    font-weight: 600;
 }
 .view-details-btn:hover{
     background-color: #238276;
+    transform: translateY(3px);
 }
 #stats{
     background-color: white;
@@ -269,15 +276,6 @@ body{
     font-size: 24px;
     font-weight: bold;
     color: var(--dark-grey);
-}
-.chart-card {
-    flex-direction: column;
-    align-items: stretch;
-    margin-top: 20px;
-}
-#hours-chart{
-    margin-top: 15px;
-    max-height: 200px;
 }
 .overlay{
     position: fixed;
@@ -356,7 +354,6 @@ body{
 }
 .custom-select {
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
     background-repeat: no repeat;
     background-position: right 12px center;
     padding-right: 40px;
@@ -397,6 +394,7 @@ body{
 .btn-primary{
     background: var(--pine-green);
     color: white;
+    border: none;
 }
 .btn-primary:hover{
     background-color: var(--medium-jungle);

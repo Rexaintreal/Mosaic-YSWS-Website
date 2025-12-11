@@ -13,53 +13,6 @@ window.addEventListener("DOMContentLoaded", () => {
     const submitOverlay = document.getElementById("submit-overlay");
     const closeSubmit = document.getElementById("close-submit");
     const submitForm = document.getElementById("submit-project-form");
-
-    function initializeChart() {
-        const canvas = document.getElementById('hours-chart');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const weeklyDataStr = canvas.getAttribute('data-weekly');
-        let weeklyData=[];
-
-        try {
-            weeklyData= JSON.parse(weeklyDataStr);
-        } catch (e) {
-            console.error('Error Parsing weekly data: ', e);
-            return;
-        }
-        const labels = weeklyData.map(d=>d.day);
-        const hours = weeklyData.map(d=>d.hours);
-        const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Hours',
-                    data: hours,
-                    backgroundColor: 'rgba(42, 157, 143, 0.6)',
-                    borderColor: 'rgba(42, 157, 143, 1)',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y:{
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
-                }
-            }
-        });
-    }
     function resetAddForm(){
         addProjectForm.reset();
         hoursPreview.textContent="";
@@ -83,7 +36,7 @@ window.addEventListener("DOMContentLoaded", () => {
             <div class="details-grid">
                 <div class="details-section">
                     <h3>Project Information</h3>
-                    <p><strong>Description:</strong>${project.detail || 'No Description' }}</p>>
+                    <p><strong>Description:</strong>${project.detail || 'No Description' }</p>
                     ${project.theme ? `<p><strong>Theme:</strong> <span class="theme-tag">${project.theme}</span></p> `: ''}
                     ${project.languages ? `<p><strong>Languages:</strong> ${project.languages}` : ''}
                 </div>
@@ -115,12 +68,12 @@ window.addEventListener("DOMContentLoaded", () => {
                         ${project.demo_url ? `<p><a href="${project.demo_url}" target="_blank">Live Demo</a></p>`: ""}
                     </div>
                     `:''}
-                ${project.comments && projects.comments.length > 0 ? `
+                ${project.comments && project.comments > 0 ? `
                     <div class="details-section">
                         <h3>Admin Comments</h3>
                         <div class="comment-list">
                             ${project.comments.map(comment=>`
-                                    <div class="comment-ticket">
+                                    <div class="comment-item">
                                         <div class="comment-author">${comment.admin_name}</div>
                                         <div class="comment-date">${comment.created_at}</div>
                                         <div class="comment-text">${comment.comment}</div>
@@ -147,7 +100,7 @@ window.addEventListener("DOMContentLoaded", () => {
         const hoursDisplay = projectCard.querySelector(".hours-display");
         let projectName = projectCard.getAttribute('data-hackatime-project')
 
-        if (!projectName || !hoursDisplay){
+        if (!projectName){
             if (hoursDisplay) hoursDisplay.textContent = "No project linked";
             return;
         }
@@ -155,7 +108,7 @@ window.addEventListener("DOMContentLoaded", () => {
         hoursDisplay.textContent="Fetching...";
 
         try {
-            const params= new URLSearchParams({'project-name': projectName});
+            const params= new URLSearchParams({'project_name': projectName});
             const response = await fetch('/api/project-hours?' + params.toString());
             const data = await response.json();
 
@@ -172,7 +125,7 @@ window.addEventListener("DOMContentLoaded", () => {
     submitForm?.addEventListener("submit", async(e)=>{
         e.preventDefault();
         const projectId = document.getElementById("submit-project-id").value;
-        const screenshortUrl = document.getElementById("screenshot-url").value;
+        const screenshotUrl = document.getElementById("screenshot-url").value;
         const githubUrl = document.getElementById("github-url").value;
         const demoUrl = document.getElementById("demo-url").value;
         const languages = document.getElementById("languages").value;
@@ -182,7 +135,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    screenshort_url: screenshortUrl,
+                    screenshot_url: screenshotUrl,
                     github_url: githubUrl,
                     demo_url: demoUrl,
                     languages: languages,
@@ -247,7 +200,7 @@ window.addEventListener("DOMContentLoaded", () => {
             projectsGrid.appendChild(projectCard);
             fetchProjectHours(projectCard);
             projectCard.addEventListener("click", ()=>{
-                showProjectDetails(newProject.id);
+                showProjectDetails(newProject. id);
             });
             overlay.classList.add("hidden");
             resetAddForm();
@@ -259,7 +212,7 @@ window.addEventListener("DOMContentLoaded", () => {
     screenshotInput?.addEventListener("input", ()=>{
         const url = screenshotInput.value;
         if (url) {
-            screenshotPreview.innerHTML = `<img src="${url}" alt="Screenshot preview" onerror="this.style.display='none'>`;
+            screenshotPreview.innerHTML = `<img src="${url}" alt="Screenshot preview" onerror="this.style.display='none'">`;
         } else {
             screenshotPreview.innerHTML="";
         }
@@ -322,5 +275,4 @@ window.addEventListener("DOMContentLoaded", () => {
             showProjectDetails(projectId)
         });
     });
-    initializeChart();
 });

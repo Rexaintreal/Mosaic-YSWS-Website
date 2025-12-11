@@ -180,10 +180,8 @@ def dashboard():
 def get_user_stats(user):
     stats = {
         'total_hours': 0,
-        'streak': 0,
         'completed_projects': 0,
-        'in_review_projects': 0,
-        'weekly_hours': []
+        'in_review_projects': 0
     }
     if not user.slack_id:
         return stats
@@ -195,31 +193,6 @@ def get_user_stats(user):
         if response.status_code == 200:
             data = response.json()
             stats['total_hours'] = round(data.get('data', {}).get('total_seconds', 0)/3600, 2)
-
-        streak_url = f"{HACKATIME_BASE_URL}/authenticated/streak"
-        streak_response = requests.get(streak_url, headers=headers, timeout=5)
-        if streak_response.status_code == 200:
-            streak_data = streak_response.json()
-            stats['streak'] = streak_data.get('data', {}).get('current_streak', 0)
-
-        weekly_data = []
-        for i in range(6, -1, -1):
-            date=datetime.now() - timedelta(days=i)
-            date_str=date.strftime('%Y-%m-%d')
-
-            spans_url = f"{HACKATIME_BASE_URL}/users/{user.slack_id}/heartbeats/spans?date={date_str}"
-            spans_response = requests.get(spans_url, headers=headers,timeout = 5)
-            day_hours = 0
-            if spans_response.status_code == 200:
-                spans_data = spans_response.json()
-                total_seconds = spans_data.get('data', {}).get('total_seconds', 0)
-                day_hours = round(total_seconds /3600, 2)
-
-            weekly_data.append({
-                'day': date.strftime('%a'),
-                'hours': day_hours
-            })
-        stats['weekly_hours'] = weekly_data
         stats['completed_projects'] = Project.query.filter_by(user_id=user.id, status='approved').count()
         stats['in_review_projects'] = Project.query.filter_by(user_id=user.id, status='in_review').count()
         
@@ -272,9 +245,9 @@ def submit_project(project_id):
     
     data = request.get_json()
 
-    project_screenshot = data.get('screenshot_url')
-    project_github = data.get('github_url')
-    project_demo = data.get('demo_url')
+    project_screenshot_url = data.get('screenshot_url')
+    project_github_url = data.get('github_url')
+    project_demo_url = data.get('demo_url')
     project_summary = data.get('summary')
     project_languages = data.get('languages')
     project.status = "in_review"
@@ -313,7 +286,7 @@ def get_project_details(project_id):
                     raw_projects = data.get("data", {}).get('projects', [])
                     for proj in raw_projects:
                         if proj.get('name') == project.hackatime_project:
-                            raw_hours = proj.get('total_seconds', 0) / 3600
+                            raw_hours = round(proj.get('total_seconds', 0) / 3600, 2)
                             break
                 else:
                     print(f"Status Code {response.status_code} Fetching Hackatime Projects")
@@ -332,6 +305,7 @@ def get_project_details(project_id):
         'detail': project.detail,
         'hackatime_project': project.hackatime_project,
         'status': project.status,
+        'raw_hours': raw_hours,
         'approved_hours': project.approved_hours,
         'screenshot_url': project.screenshot_url,
         'github_url': project.github_url,
@@ -463,8 +437,9 @@ def get_project_hours():
             data = response.json()
             raw_projects = data.get("data", {}).get('projects', [])
             for proj in raw_projects:
-                hours = proj.get('total_seconds', 0)/3600
-                return flask.jsonify({'hours' : round(hours, 2)}), 200
+                if proj.get('name')==project_name:
+                    hours = proj.get('total_seconds', 0)/3600
+                    return flask.jsonify({'hours' : round(hours, 2)}), 200
             return flask.jsonify({'hours': 0, 'message': 'Project not Found'}), 200
         else:
             return flask.jsonify({'Error' : 'Failed to fetch from hackatime'}), 500
