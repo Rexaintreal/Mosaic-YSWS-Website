@@ -2,6 +2,7 @@ import flask
 import hashlib
 import random
 import os
+import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -12,26 +13,43 @@ from flask_login import UserMixin
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import requests
+import firebase_admin
+from firebase_admin import credentials, firestore
+import sys
 load_dotenv()
 
 app = Flask(__name__)
+is_vercel = os.getenv("VERCEL_ENV") == "production"
+app.secret_key = os.getenv("SECRET_KEY")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db.sqlite3")
+if (os.getenv("VERCEL_ENV")) == "production":
+    app.config["SQLALCHEMY_DATABASE_URI"]=os.getenv("DATABASE_URL")
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args":{'sslmode': 'require'}
+    }
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"]=f"sqlite:///{DB_PATH}"
+db = SQLAlchemy(app)
 HACKATIME_API_KEY = os.getenv("HACKATIME_API_KEY")
 HACKATIME_BASE_URL = "https://hackatime.hackclub.com/api/v1"
-
-
-
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
-db = SQLAlchemy(app)
-app.secret_key = os.getenv("SECRET_KEY")
-
 ADMIN_SLACK_IDS = [os.getenv("ADMIN_SLACK_ID", "")]
 
 
 if not HACKATIME_API_KEY:
     print("WARNING HACKATIME API KEY NOT WORKING!")
 
+def autoconnectHackatime():
+    return {
+        "Authorization": f"Bearer {HACKATIME_API_KEY}"
+    }
+def is_admin(user):
+    return user and user.slack_id in ADMIN_SLACK_IDS
+
+def get_user_by_id(user_id):
+    return User.query.get(user_id)
+def get_user_by_slack_id(slack_id):
+    return User.query.filter_by(slack_id=slack_id).first()
 @app.route("/")
 def main():
     return render_template('index.html')
@@ -91,12 +109,7 @@ class Theme(db.Model):
 with app.app_context():
     db.create_all()
 
-def autoconnectHackatime():
-    return {
-        "Authorization": f"Bearer {HACKATIME_API_KEY}"
-    }
-def is_admin(user):
-    return user and user.slack_id in ADMIN_SLACK_IDS
+
 
 @app.route('/signin', methods=['GET', 'POST'])
 def signin():
@@ -481,7 +494,7 @@ def shop():
         return redirect('/signin')
     user = User.query.get(user_id)
     return render_template('shop.html', user=user)
-@app.route('/admin/api/award-tiles/<int:projet_id>', methods=['POST'])
+@app.route('/admin/api/award-tiles/<int:project_id>', methods=['POST'])
 def admin_award_tiles(project_id):
     user_id = session.get('user_id')
     if not user_id:

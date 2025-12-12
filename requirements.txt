@@ -4,3 +4,4 @@ datetime
 flask_login
 python-dotenv
 requests
+firebase-admin
