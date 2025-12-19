@@ -6,3 +6,4 @@ firebase-admin
 requests
 gunicorn
 psycopg2-binary==2.9.9
+pyOpenSSL==23.3.0

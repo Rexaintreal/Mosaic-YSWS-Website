@@ -161,7 +161,7 @@ async function submitReview(event, projectId) {
         }
 }
 async function awardTiles(projectId) {
-    const tiles_amount = document.getElementById(`tiles-${projectId}`).value;
+    const tilesAmount = document.getElementById(`tiles-${projectId}`).value;
     if (!tilesAmount || tilesAmount <= 0){
         alert('Please enter a valid tiles amount');
         return;
@@ -187,8 +187,8 @@ async function awardTiles(projectId) {
     }
 }
 async function quickReject(projectId) {
-    const comment = prompt('Please provide a reason for rejetion!');
-    if (!comment) reutrn;
+    const comment = prompt('Please provide a reason for rejection!');
+    if (!comment) return;
 
     try {
         const reviewResponse = await fetch(`/admin/api/review-project/${projectId}`, {
@@ -239,7 +239,7 @@ function openThemeModal(){
     document.getElementById('theme-modal').classList.remove('hidden');
 }
 function closeThemeModal(){
-    document.getElementById('theme.modal').classList.add('hidden');
+    document.getElementById('theme-modal').classList.add('hidden');
     document.getElementById('theme-form').reset();
 }
 async function submitTheme(event){
@@ -266,7 +266,7 @@ async function submitTheme(event){
 async function manageThemes() {
     try {
         const response = await fetch('/api/themes');
-        const data = await response.json()
+        const data = await response.json();
         const themesList = document.getElementById('themes-list');
         if (data.themes && data.themes.length > 0){
             themesList.innerHTML = data.themes.map(theme => `
@@ -275,7 +275,7 @@ async function manageThemes() {
                         <h4>${theme.name}</h4>
                         <p>${theme.description || 'No Description'}</p>
                     </div>
-                    <button class="delete-theme-btn onclick="deleteTheme(${theme.id})">Delete Theme</button>
+                    <button class="delete-theme-btn" onclick="deleteTheme(${theme.id})">Delete Theme</button>
                 </div>
                 `).join('');
         } else {
@@ -312,17 +312,19 @@ function closeReviewModal(){
     document.getElementById('review-modal').classList.add('hidden');
 }
 document.getElementById('review-modal')?.addEventListener('click', (e)=>{
-    if (e.targetid === 'review-modal'){
-        closeReviewModal()
+    if (e.target.id === 'review-modal'){
+        closeReviewModal();
     }
 });
+
 document.getElementById('theme-modal')?.addEventListener('click', (e)=>{
-    if (e.targetid === 'theme-modal'){
-        closeThemeModal()
+    if (e.target.id === 'theme-modal'){
+        closeThemeModal();
     }
 });
+
 document.getElementById('themes-list-modal')?.addEventListener('click', (e)=>{
-    if (e.targetid === 'themes-list-modal'){
-        closeThemesListModal()
+    if (e.target.id === 'themes-list-modal'){
+        closeThemesListModal();
     }
 });

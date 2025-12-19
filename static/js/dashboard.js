@@ -2,16 +2,17 @@ async function loadActiveThemes(){
     try {
         const response = await fetch('/api/themes');
         const data = await response.json();
-        if (data.themes && data.theme.length > 0){
+        if (data.themes && data.themes.length > 0){
             const banner = document.getElementById('themes-banner');
+            
+            data.themes.forEach(theme => {
+                const themeDiv = document.createElement('div');
+                themeDiv.className='theme-item';
+                themeDiv.innerHTML=`<strong>${theme.name}</strong>${theme.description ? ': ' + theme.description : ''}`;
+                banner.appendChild(themeDiv);
+            });
+            banner.classList.add('active');
         }
-        data.themes.forEach(themes => {
-            const themeDiv = document.createElement('div');
-            themeDiv.className='theme-item';
-            themeDiv.innerHTML=`<strong>${theme.name}</strong>${theme.description ? ': ' + theme.description : ''}`;
-            banner.appendChild(themeDiv);
-        });
-        banner.classList.add('active');
     } catch (e) {
         console.error('Error loading themes: ', e);
     }

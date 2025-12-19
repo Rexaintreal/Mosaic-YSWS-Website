@@ -1,13 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
 :root{
     /*Source of Colors: https://coolors.co/e63946-2a9d8f-f1faee-f4d35e-4caf50 */
     --punch-red: #e63946;
     --pine-green: #2a9d8f;
     --honeydew: #f1faee;
     --royal-gold: #f4d35e;
-    --medium-jungle: #4caf50; /* what are these coolors.co names? */
+    --medium-jungle: #4caf50; 
 }
+
 body {
     margin: 0;
     font-family: 'Momo Trust Display', sans-serif;
@@ -17,60 +19,59 @@ body {
     justify-content: center;
     align-items: center;
 }
+
 #container {
-    width: 350px;
+    width: 90%;
+    max-width: 350px;
     padding: 25px;
     border-radius: 25px;
     background: rgba(255, 255, 255, 0.9);
     box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
     text-align: center;
-    transition: transform 0.3s ease-in-out;
 }
-#container:hover{
-    transform: scale(1.05);
-}
-#container h1{
+
+#container h1 {
     font-size: 2em;
     margin-bottom: 15px;
+    margin-top: 0;
     color: #C70039;
 }
-#container form{
+
+.auth-btn {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 10px;
-}
-#container label{
-    font-size: 0.9em;
-    color: #2C3E50;
-    text-align: left;
-}
-#container input{
-    border: 2px solid #C70039;
-    border-radius: 10px;
-    padding: 8px;
-    font-size: 1em;
-    color: #2C3E50;
-    outline: none;
-}
-#container input:focus{
-    border-color: #FFD93D;
-    box-shadow: 0 0 8px #FFD93D;
-}
-#slack{
     margin-top: 15px;
     padding: 10px;
     border-radius: 15px;
-    border: none;
     background-color: rgba(255, 255, 255, 0.75);
-    font-family: 'Poppins';
+    font-family: 'Poppins', sans-serif;
     color: black;
     border: solid 2px black;
-    font: 900;
+    font-weight: 700;
     font-size: 1em;
+    text-decoration: none;
     cursor: pointer;
     transition: all 0.3s ease-in-out;
 }
-#slack:hover{
-    transform: scale(1.05);
-    box-shadow: 0 0 25px var(--punch-red);
+
+.auth-btn img {
+    width: 20px; 
+    height: 20px;
 }
+
+.auth-btn:hover {
+    transform: scale(1.05);
+    background-color: #fff;
+}
+
+.slack-btn:hover {
+    box-shadow: 0 0 25px var(--royal-gold); 
+    border-color: var(--royal-gold);
+}
+
+/* .hackclub-btn:hover {
+    box-shadow: 0 0 25px var(--punch-red); 
+    border-color: var(--punch-red);
+} */
