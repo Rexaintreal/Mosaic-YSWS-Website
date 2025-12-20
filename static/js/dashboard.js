@@ -37,9 +37,34 @@ window.addEventListener("DOMContentLoaded", () => {
         hoursPreview.textContent="";
     }
     window.openSubmitForm = function(projectId){
-        document.getElementById("submit-project-id").value = projectId;
+        /*document.getElementById("submit-project-id").value = projectId;
         detailsOverlay.classList.add("hidden");
-        submitOverlay.classList.remove("hidden");
+        submitOverlay.classList.remove("hidden");*/
+        console.log("openSubmitForm called with projectId:", projectId);
+        const submitProjectId = document.getElementById("submit-project-id");
+        const detailsOverlay = document.getElementById("project-details-overlay");
+        const submitOverlay = document.getElementById("submit-overlay");
+        
+        console.log("Elements found:", {
+            submitProjectId: !!submitProjectId,
+            detailsOverlay: !!detailsOverlay,
+            submitOverlay: !!submitOverlay
+        });
+        
+        if (submitProjectId) {
+            submitProjectId.value = projectId;
+            console.log("Set project ID to:", projectId);
+        }
+        
+        if (detailsOverlay) {
+            detailsOverlay.classList.add("hidden");
+            console.log("Hidden details overlay");
+        }
+        
+        if (submitOverlay) {
+            submitOverlay.classList.remove("hidden");
+            console.log("Showing submit overlay");
+        }
     };
     async function showProjectDetails(projectId) {
         try {
@@ -65,7 +90,7 @@ window.addEventListener("DOMContentLoaded", () => {
                     <table class="hours-table">
                         <tr>
                             <td>Raw Hours(Hackatime):</td>
-                            <td>${project.raw_hours} hrs <td>
+                            <td>${project.raw_hours} hrs</td>
                         </tr>
                         <tr>
                             <td>Approved Hours:</td>
@@ -104,7 +129,7 @@ window.addEventListener("DOMContentLoaded", () => {
                     </div>
 
                     ${project.status == 'draft' ? `
-                        <button class="btn-primary" onclick="openSubmitForm(${projectId})">Submit for Review</button>
+                        <button class="btn-primary" onclick="openSubmitForm('${project.id}')">Submit for Review</button>
                         `: ''}
                 `;
 
