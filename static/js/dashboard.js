@@ -320,3 +320,38 @@ window.addEventListener("DOMContentLoaded", () => {
         });
     });
 });
+
+
+async function refreshTilesBalance() {
+    try {
+        const response = await fetch('/dashboard');
+        if (response.ok) {
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            const statCards = doc.querySelectorAll('.stat-card');
+            if (statCards.length >= 4) {
+                const newTilesValue = statCards[3].querySelector('.stat-value').textContent.trim();
+                
+                const currentStatCards = document.querySelectorAll('.stat-card');
+                if (currentStatCards.length >= 4) {
+                    const tilesElement = currentStatCards[3].querySelector('.stat-value');
+                    if (tilesElement && tilesElement.textContent.trim() !== newTilesValue) {
+                        tilesElement.textContent = newTilesValue;
+                        tilesElement.style.color = '#4CAF50';
+                        setTimeout(() => {
+                            tilesElement.style.color = '';
+                        }, 1500);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error refreshing tiles balance:', e);
+    }
+}
+
+setInterval(refreshTilesBalance, 10000);
+window.addEventListener('focus', refreshTilesBalance);
+loadActiveThemes();

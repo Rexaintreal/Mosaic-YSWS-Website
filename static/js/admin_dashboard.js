@@ -19,7 +19,7 @@ async function viewProject(projectId) {
         const reviewHTML = `
         <div class="review-header">
             <h2>${project.name}</h2>
-            <p>Submitted by: User</p>
+            <p>Submitted by: ${project.user_name}</p>
         </div>
         <div class="review-section">
             <h3>Project Information</h3>
@@ -30,7 +30,7 @@ async function viewProject(projectId) {
                 </div>
                 <div class="info-item">
                     <div class="info-label">Raw Hours (Hackatime)</div>
-                    <div class="info-value">${project.approved_hours}</div>
+                    <div class="info-value">${project.raw_hours}</div>
                 </div>
                 ${project.languages ?`
                     <div class="info-item">
@@ -76,14 +76,14 @@ async function viewProject(projectId) {
         ` : ''}
                     <div class="review-form">
                         <h3>Review Project</h3>
-                        <form id="review-form-${projectId}" onsubmit="submitReview(event, ${projectId})">
+                        <form id="review-form-${projectId}">
                             <div class="form-group">
                                 <label for="approved-hours-${projectId}"> Approved Hours</label>
                                 <input type="text" id="approved-hours-${projectId}" step="0.01" min="0" value="${project.approved_hours}" required>
                             </div>
                             <div class="form-group">
                                 <label for="theme-${projectId}">Theme/Category</label>
-                                <input type="text" id="theme-${projectId}" value="${project.theme || ''}" placeholder="e.g., Web Development, Game, AI>
+                                <input type="text" id="theme-${projectId}" value="${project.theme || ''}" placeholder="e.g., Web Development, Game, AI">
                             </div>
                             <div class="form-group">
                                 <label for="status-${projectId}">Status</label>
@@ -112,6 +112,9 @@ async function viewProject(projectId) {
 
                 document.getElementById('review-content').innerHTML = reviewHTML;
                 document.getElementById('review-modal').classList.remove('hidden');
+                document.getElementById(`review-form-${projectId}`).addEventListener('submit', (event) => {
+                    submitReview(event, projectId);
+                });
     } catch (e) {
         alert('Error Loading Project Details');
         console.error(e);
@@ -123,6 +126,7 @@ async function submitReview(event, projectId) {
         const theme = document.getElementById(`theme-${projectId}`).value;
         const status = document.getElementById(`status-${projectId}`).value;
         const comment = document.getElementById(`comment-${projectId}`).value;
+        const tilesAmount = document.getElementById(`tiles-${projectId}`).value;
 
         try {
             const reviewResponse = await fetch(`/admin/api/review-project/${projectId}`, {
@@ -133,7 +137,7 @@ async function submitReview(event, projectId) {
                 body: JSON.stringify({
                     approved_hours: approvedHours,
                     theme: theme,
-                    status: status
+                    status: status,
                 })
             });
             if (!reviewResponse.ok){
@@ -154,6 +158,22 @@ async function submitReview(event, projectId) {
                     console.error('Error addibng comment');
                 }
             }
+            if (tilesAmount && parseInt(tilesAmount) > 0) {
+            const tilesResponse = await fetch(`/admin/api/award-tiles/${projectId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({tiles: parseInt(tilesAmount)})
+            });
+            
+            if (!tilesResponse.ok) {
+                console.error('Error awarding tiles');
+                alert('Review saved but error awarding tiles!');
+                closeReviewModal();
+                location.reload();
+                return;
+            }
+            }
+        
             alert('Review saved successfully!')
             closeReviewModal();
             location.reload(); 

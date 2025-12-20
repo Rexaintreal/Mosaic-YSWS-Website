@@ -367,6 +367,9 @@ def get_project_details(project_id):
     if not is_admin(user) and project.get('user_id') != user_id:
         return flask.jsonify({'error': 'Forbidden'}), 403
     
+    project_owner = get_user_by_id(project['user_id'])
+    project_owner_name = project_owner.get('name') if project_owner else 'Unknown User'
+
     raw_hours = 0
     if project.get('hackatime_project'):
         project_user = get_user_by_id(project['user_id'])
@@ -413,7 +416,8 @@ def get_project_details(project_id):
         'theme': project.get('theme'),
         'submitted_at': project.get('submitted_at'),
         'reviewed_at': project.get('reviewed_at'),
-        'comments': comments
+        'comments': comments,
+        'user_name': project_owner_name
     }), 200
 
 @app.route('/admin/dashboard')
@@ -627,7 +631,7 @@ def admin_award_tiles(project_id):
     project_user_ref = db.collection('users').document(project_user_id)
     project_user = project_user_ref.get().to_dict()
     
-    current_balance = project_user.get('tiles_balance', 0)
+    current_balance = project_user.get('tiles_balance')
     new_balance = current_balance + tiles_amount
     
     project_user_ref.update({'tiles_balance': new_balance})
