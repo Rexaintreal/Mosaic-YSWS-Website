@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Mosaic Dashboard {% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css')}}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add" />
 </head>
 <body>
@@ -30,46 +31,68 @@
     <!--Nav Bar-->
     <div id="navbar">
         <div id="part1">
-            <p class="nav-part current">My Projects</p>
-            <p class="nav-part"  onclick="window.location.href='/leaderboard'">Leaderboard</p>
-            <p class="nav-part" onclick="window.location.href='/shop'">Shop</p>
-            {% if is_admin %}
-            <p class="nav-part admin-link" onclick="window.location.href='/admin/dashboard'">Admin Panel</p>
+            <p class="nav-part {% if current_page == 'dashboard' %}current{% endif %}" onclick="window.location.href='/dashboard'">My Projects</p>
+            <p class="nav-part {% if current_page == 'leaderboard' %}current{% endif %}" onclick="window.location.href='/leaderboard'">Leaderboard</p>
+            <p class="nav-part {% if current_page == 'shop' %}current{% endif %}" onclick="window.location.href='/shop'">Shop</p>
+            {% if user and is_admin(user) %}
+            <p class="nav-part admin-link {% if current_page == 'admin' %}current{% endif %}" onclick="window.location.href='/admin/dashboard'">Admin Panel</p>
             {% endif %}
         </div> 
         <div id="part2">
             <p>MOSAIC</p>
         </div>
     </div>
-    <div id="themes-banner"></div>
     <div id="decor">
         <img src="https://hc-cdn.hel1.your-objectstorage.com/s/v3/6744b79e66c6963e94189a886b7bfe544e75135f_websitedecor_2_.png" id="img2">
     </div>
-    <!--Projects Page-->
+    <!-- Dashboard Container -->
     <div id="dashboard-container">
         <div id="left-panel">
+            <div class="connection-card {% if not auto_connected %}connection-error{% else %}connection-success{% endif %}">
+                <div class="connection-icon">
+                    {% if not auto_connected %}
+                    <i class="fas fa-exclamation-triangle"></i>
+                    {% else %}
+                    <i class="fas fa-check-circle"></i>
+                    {% endif %}
+                </div>
+                <div class="connection-content">
+                    {% if not auto_connected %}
+                    <h3>Hackatime Auto-connect Failed!</h3>
+                    <p>Message @the space man on slack for help</p>
+                    {% else %}
+                    <h3>Connected to Hackatime</h3>
+                    <p>Your hours are being tracked automatically</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Themes Card -->
+            <div class="themes-card">
+                <div class="themes-card-header">
+                    <h3>Active Themes</h3>
+                </div>
+                <div id="themes-list-content" class="themes-list-content">
+                    <div class="themes-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading themes...
+                    </div>
+                </div>
+            </div>
+
             <div id="project-section">
                 <div class="project-header">
                     <h2>Your Projects</h2>
                     <button id="add-project-btn" class="icon-btn">
-                        <span class="material-symbols-outlined">add</span>
+                        <i class="fas fa-plus"></i>
                     </button>
                 </div>
-                {% if not auto_connected %}
-                <div class="alert-box">
-                    <p>Hackatime Auto-connect Failed! Message @the space man on slack!</p>
-                </div>
-                {% else %}
-                <div class="success-box">
-                    <p>Connected to Hackatime</p>
-                </div>
-                {% endif %}
+
                 <div id="projects-grid">
                     {% for sp in saved_projects %}
-                    <div class="project-card" data-project-id = "{{sp.id}}" data-hackatime-project="{{sp.hackatime_project}}">
+                    <div class="project-card" data-project-id="{{sp.id}}" data-hackatime-project="{{sp.hackatime_project}}">
                         <div class="project-card-header">
                             <h3>{{sp.name}}</h3>
-                            <span class="status-badge status-{{ sp.status }}">{{ sp.status.replace('_', '').title()}}</span>
+                            <span class="status-badge status-{{ sp.status }}">{{ sp.status.replace('_', ' ').title()}}</span>
                         </div>
                         <p class="project-description">{{ sp.detail or 'No Description'}}</p>
                         {% if sp.theme %}
@@ -80,43 +103,43 @@
                             <button class="view-details-btn">View Details</button>
                         </div>
                     </div>
-                    {% endfor%}
-            </div>
-        </div>
-    </div>
-    <div id="right-panel">
-        <div id="stats">
-            <h2>Your Statistics</h2>
-            <div class="stat-card">
-                <div class="stat-icon"></div>
-                <div class="stat-content">
-                    <h3>Total Hours (all of Hackatime)</h3>
-                    <p class="stat-value">{{ stats.total_hours }}</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"></div>
-                <div class="stat-content">
-                    <h3>Projects Completed</h3>
-                    <p class="stat-value">{{ stats.completed_projects }}</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"></div>
-                <div class="stat-content">
-                    <h3>Projects In Review</h3>
-                    <p class="stat-value">{{ stats.in_review_projects }}</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"></div>
-                <div class="stat-content">
-                    <h3>Tiles Balance</h3>
-                    <p class="stat-value">{{ user.tiles_balance if user.tiles_balance else 0}}</p>
+                    {% endfor %}
                 </div>
             </div>
         </div>
+
+        <div id="right-panel">
+            <div id="stats">
+                <h2>Your Statistics</h2>
+                <div class="stat-card">
+                    <div class="stat-content">
+                        <h3>Total Hours (all of Hackatime)</h3>
+                        <p class="stat-value">{{ stats.total_hours }}</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-content">
+                        <h3>Projects Completed</h3>
+                        <p class="stat-value">{{ stats.completed_projects }}</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-content">
+                        <h3>Projects In Review</h3>
+                        <p class="stat-value">{{ stats.in_review_projects }}</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-content">
+                        <h3>Tiles Balance</h3>
+                        <p class="stat-value">{{ user.tiles_balance if user.tiles_balance else 0}}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Add Project Overlay -->
     <div id="overlay" class="overlay hidden">
         <div class="overlay-content">
             <h2>Add Project</h2>
@@ -139,8 +162,8 @@
                 <p id="project-hours" class="hours-preview"></p>
 
                 <div class="form-group">
-                    <p class="project-detail">One Liner Description Please *</p>
-                    <input type="text" id="project-detail" name="project-detail" placeholder="Brief One-line detail!">
+                    <label for="project-detail">One Liner Description *</label>
+                    <input type="text" id="project-detail" name="project-detail" placeholder="Brief one-line detail!" required>
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">Add Project</button>
@@ -150,36 +173,41 @@
         </div>
     </div>
 
+    <!-- Project Details Overlay -->
     <div id="project-details-overlay" class="overlay hidden">
        <div class="overlay-content large">
             <button class="close-btn" id="close-details">&times;</button>
             <div id="project-details-content">
-                <!-- Handled by JS -->
+                <div style="text-align: center; padding: 60px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 60px; color: var(--pine-green);"></i>
+                    <p style="margin-top: 20px; font-size: 18px; color: #666;">Loading project details...</p>
+                </div>
             </div>
        </div>
     </div>
     
+    <!-- Submit Project Overlay -->
     <div id="submit-overlay" class="overlay hidden">
         <div class="overlay-content">
-            <h2>Submit Project for Review (WIP - Being Actively Worked On)</h2>
+            <h2>Submit Project for Review</h2>
             <form id="submit-project-form">
                 <input type="hidden" id="submit-project-id">
                 <div class="form-group">
-                    <label for="submission-link">Image Link (via #cdn on Slack!): *</label>
+                    <label for="screenshot-url">Image Link (via #cdn on Slack!) *</label>
                     <input type="url" id="screenshot-url" name="screenshot-url" required>
                     <div id="screenshot-preview" class="image-preview"></div>
                 </div>
                 <div class="form-group">
-                    <label for="github-url">Github Link (please set to Public): *</label>
+                    <label for="github-url">Github Link (please set to Public) *</label>
                     <input type="url" id="github-url" name="github-url" required>
                 </div>
                 <div class="form-group">
-                    <label for="demo-url">Demo Link (please ensure it works!): *</label>
+                    <label for="demo-url">Demo Link (please ensure it works!) *</label>
                     <input type="url" id="demo-url" name="demo-url" required>
                 </div>
                 <div class="form-group">
                     <label for="languages">Languages Used *</label>
-                    <input type="text" id="languages" name="languages" required placeholder="e.g. Python, Javascript, HTML, CSS, JS etc. ">
+                    <input type="text" id="languages" name="languages" required placeholder="e.g. Python, Javascript, HTML, CSS">
                 </div>
                 <div class="form-group">
                     <label for="summary">Project Summary *</label>
@@ -187,11 +215,12 @@
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">Submit for Review</button>
-                    <button type="button" id="close-submit" class="close-btn">&times;</button>
+                    <button type="button" id="close-submit" class="btn-secondary">Cancel</button>
                 </div>
             </form>
         </div>
     </div>
+    <script src="{{ url_for('static', filename='js/alert_modal.js')}}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js')}}"></script>
 </body>
 </html>
