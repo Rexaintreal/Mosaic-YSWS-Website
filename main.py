@@ -1,7 +1,6 @@
-import flask
 import os
-from flask import Flask, request, render_template, redirect, session, url_for, flash
-from datetime import datetime, timedelta
+from flask import Flask, request, render_template, redirect, session, jsonify
+from datetime import datetime, timezone
 import requests
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -47,6 +46,10 @@ def autoconnectHackatime():
 def is_admin(user):
     return user and user.get('slack_id') in ADMIN_SLACK_IDS
 
+@app.context_processor
+def utility_processor():
+    return dict(is_admin=is_admin)
+
 def get_user_by_id(user_id):
     doc = db.collection('users').document(user_id).get()
     if doc.exists:
@@ -70,6 +73,11 @@ def get_user_by_identity_id(identity_id):
         user_data['id'] = user.id
         return user_data
     return None
+
+def serialize_timestamp(obj):
+    if hasattr(obj, 'seconds'):
+        return datetime.fromtimestamp(obj.seconds, tz=timezone.utc).isoformat()
+    return obj
 
 @app.route("/")
 def main():
@@ -150,7 +158,7 @@ def hackclub_callback():
                 'email': email,
                 'verification_status': verification_status,
                 'role': 'Admin' if slack_id in ADMIN_SLACK_IDS else 'User',
-                'date_created': datetime.utcnow(),
+                'date_created': datetime.now(timezone.utc),
                 'hackatime_username': None,
                 'access_token': access_token,
                 'refresh_token': refresh_token,
@@ -231,8 +239,7 @@ def dashboard():
         auto_connected=auto_connected,
         projects=projects,
         saved_projects=saved_projects,
-        stats=stats,
-        is_admin=is_admin(user)
+        stats=stats
     )
 
 def get_user_stats(user):
@@ -266,15 +273,162 @@ def get_user_stats(user):
     
     return stats
 
+@app.route('/api/all-users', methods=['GET'])
+def get_all_users():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user = get_user_by_id(user_id)
+    if not is_admin(user):
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    try:
+        users_list = []
+        all_users = db.collection('users').stream()
+        
+        for u in all_users:
+            u_data = u.to_dict()
+            u_data['id'] = u.id
+            all_projects_query = db.collection('projects').where('user_id', '==', u.id).stream()
+            all_projects = [p for p in all_projects_query if p.to_dict().get('status') != 'draft']
+            
+            projects_count = len(all_projects)
+            # Get approved projects count
+            approved_count = sum(1 for p in all_projects if p.to_dict().get('status') == 'approved')
+            # Calculate total hours from approved projects
+            total_hours = sum(p.to_dict().get('approved_hours', 0) for p in all_projects if p.to_dict().get('status') == 'approved')
+            
+            users_list.append({
+                'id': u_data['id'],
+                'name': u_data.get('name'),
+                'email': u_data.get('email'),
+                'tiles_balance': u_data.get('tiles_balance', 0),
+                'projects_count': projects_count,
+                'approved_count': approved_count,
+                'total_hours': total_hours
+            })
+        
+        return jsonify({'users': users_list}), 200
+    except Exception as e:
+        print(f"Error fetching users: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+
+@app.route('/api/admin-stats', methods=['GET'])
+def get_admin_stats():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user = get_user_by_id(user_id)
+    if not is_admin(user):
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    try:
+        all_projects = db.collection('projects').stream()
+        
+        pending_count = 0
+        approved_count = 0
+        
+        for project in all_projects:
+            project_data = project.to_dict()
+            status = project_data.get('status')
+            
+            if status == 'in_review':
+                pending_count += 1
+            elif status == 'approved':
+                approved_count += 1
+        
+        return jsonify({
+            'pending_reviews': pending_count,
+            'approved_projects': approved_count
+        }), 200
+    except Exception as e:
+        print(f"Error fetching admin stats: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/user-projects/<user_id>', methods=['GET'])
+def get_user_projects(user_id):
+    admin_id = session.get('user_id')
+    if not admin_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    admin = get_user_by_id(admin_id)
+    if not is_admin(admin):
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    try:
+        projects = []
+        projects_ref = db.collection('projects').where('user_id', '==', user_id).stream()
+        
+        for proj in projects_ref:
+            proj_data = proj.to_dict()
+            # Skip draft projects
+            if proj_data.get('status') == 'draft':
+                continue
+                
+            proj_data['id'] = proj.id
+            if 'created_at' in proj_data:
+                proj_data['created_at'] = serialize_timestamp(proj_data['created_at'])
+            if 'submitted_at' in proj_data:
+                proj_data['submitted_at'] = serialize_timestamp(proj_data['submitted_at'])
+            if 'reviewed_at' in proj_data:
+                proj_data['reviewed_at'] = serialize_timestamp(proj_data['reviewed_at'])
+            projects.append(proj_data)
+        
+        projects.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
+        return jsonify({'projects': projects}), 200
+    except Exception as e:
+        print(f"Error fetching user projects: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/delete-project/<project_id>', methods=['DELETE'])
+def delete_project(project_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    project_ref = db.collection('projects').document(project_id)
+    project_doc = project_ref.get()
+    
+    if not project_doc.exists:
+        return jsonify({'error': 'Project not found'}), 404
+    
+    project = project_doc.to_dict()
+    
+    if project.get('user_id') != user_id and not is_admin(user):
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    if not is_admin(user) and project.get('status') != 'draft':
+        return jsonify({'error': 'Only draft projects can be deleted'}), 403
+    
+    try:
+        comments_ref = db.collection('project_comments').where('project_id', '==', project_id).stream()
+        for comment in comments_ref:
+            comment.reference.delete()
+        
+        project_ref.delete()
+        
+        return jsonify({'message': 'Project deleted successfully'}), 200
+    except Exception as e:
+        print(f"Error deleting project: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
 @app.route("/api/add-project", methods=['POST'])
 def add_project_api():
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     
     user = get_user_by_id(user_id)
     if not user:
-        return flask.jsonify({'error': 'User not found'}), 404
+        return jsonify({'error': 'User not found'}), 404
     
     data = request.get_json()
     name = data.get('name')
@@ -282,7 +436,7 @@ def add_project_api():
     hackatime_project = data.get('hack_project')
     
     if not name:
-        return flask.jsonify({'error': 'Missing project name'}), 400
+        return jsonify({'error': 'Missing project name'}), 400
     
     project_data = {
         'user_id': user_id,
@@ -290,7 +444,7 @@ def add_project_api():
         'detail': detail,
         'hackatime_project': hackatime_project,
         'status': 'draft',
-        'created_at': datetime.utcnow(),
+        'created_at': datetime.now(timezone.utc),
         'total_seconds': 0,
         'approved_hours': 0.0,
         'screenshot_url': None,
@@ -307,7 +461,7 @@ def add_project_api():
     project_ref = db.collection('projects').document()
     project_ref.set(project_data)
     
-    return flask.jsonify({
+    return jsonify({
         'id': project_ref.id,
         'name': name,
         'detail': detail,
@@ -319,13 +473,13 @@ def add_project_api():
 def submit_project(project_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     
     project_ref = db.collection('projects').document(project_id)
     project = project_ref.get()
     
     if not project.exists or project.to_dict().get('user_id') != user_id:
-        return flask.jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found'}), 404
     
     data = request.get_json()
     
@@ -336,7 +490,7 @@ def submit_project(project_id):
         'summary': data.get('summary'),
         'languages': data.get('languages'),
         'status': 'in_review',
-        'submitted_at': datetime.utcnow()
+        'submitted_at': datetime.now(timezone.utc)
     }
     
     if ADMIN_SLACK_IDS:
@@ -346,26 +500,26 @@ def submit_project(project_id):
     
     project_ref.update(update_data)
     
-    return flask.jsonify({'message': 'Project submitted for review'}), 200
+    return jsonify({'message': 'Project submitted for review'}), 200
 
 @app.route("/api/project-details/<project_id>", methods=['GET'])
 def get_project_details(project_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     
     user = get_user_by_id(user_id)
     project_ref = db.collection('projects').document(project_id)
     project_doc = project_ref.get()
     
     if not project_doc.exists:
-        return flask.jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found'}), 404
     
     project = project_doc.to_dict()
     project['id'] = project_doc.id
     
     if not is_admin(user) and project.get('user_id') != user_id:
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     project_owner = get_user_by_id(project['user_id'])
     project_owner_name = project_owner.get('name') if project_owner else 'Unknown User'
@@ -397,10 +551,10 @@ def get_project_details(project_id):
         comments.append({
             'admin_name': admin.get('name') if admin else 'Admin',
             'comment': comment['comment'],
-            'created_at': comment['created_at']
+            'created_at': serialize_timestamp(comment.get('created_at', datetime.utcnow()))
         })
     
-    return flask.jsonify({
+    return jsonify({
         'id': project['id'],
         'name': project.get('name'),
         'detail': project.get('detail'),
@@ -414,8 +568,8 @@ def get_project_details(project_id):
         'summary': project.get('summary'),
         'languages': project.get('languages'),
         'theme': project.get('theme'),
-        'submitted_at': project.get('submitted_at'),
-        'reviewed_at': project.get('reviewed_at'),
+        'submitted_at': serialize_timestamp(project.get('submitted_at')) if project.get('submitted_at') else None,
+        'reviewed_at': serialize_timestamp(project.get('reviewed_at')) if project.get('reviewed_at') else None,
         'comments': comments,
         'user_name': project_owner_name
     }), 200
@@ -430,118 +584,92 @@ def admin_dashboard():
     if not is_admin(user):
         return redirect("/dashboard")
 
-    assigned_projects = []
-    assigned_ref = db.collection('projects').where('assigned_admin_id', '==', user_id).where('status', '==', 'in_review').stream()
-    for proj in assigned_ref:
-        proj_data = proj.to_dict()
-        proj_data['id'] = proj.id
-        proj_data['user'] = get_user_by_id(proj_data['user_id'])
-        assigned_projects.append(proj_data)
-    all_pending = []
-    pending_ref = db.collection('projects').where('status', '==', 'in_review').stream()
-    for proj in pending_ref:
-        proj_data = proj.to_dict()
-        proj_data['id'] = proj.id
-        proj_data['user'] = get_user_by_id(proj_data['user_id'])
-        if proj_data.get('assigned_admin_id'):
-            proj_data['assigned_admin'] = get_user_by_id(proj_data['assigned_admin_id'])
-        all_pending.append(proj_data)
-    
-    return render_template(
-        'admin_dashboard.html',
-        user=user,
-        assigned_projects=assigned_projects,
-        all_pending=all_pending
-    )
+    return render_template('admin_dashboard.html', user=user)
 
 @app.route('/admin/api/review-project/<project_id>', methods=['POST'])
 def admin_review_project(project_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     
     user = get_user_by_id(user_id)
     if not is_admin(user):
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     project_ref = db.collection('projects').document(project_id)
     if not project_ref.get().exists:
-        return flask.jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found'}), 404
     
     data = request.get_json()
     
     update_data = {
         'status': data.get('status'),
         'approved_hours': float(data.get('approved_hours', 0)),
-        'reviewed_at': datetime.utcnow(),
+        'reviewed_at': datetime.now(timezone.utc),
         'theme': data.get('theme')
     }
     
     project_ref.update(update_data)
-    return flask.jsonify({'message': 'Project review updated'}), 200
+    return jsonify({'message': 'Project review updated'}), 200
 
 @app.route('/admin/api/comment-project/<project_id>', methods=['POST'])
 def admin_comment_project(project_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorised'}), 401
+        return jsonify({'error': 'Unauthorised'}), 401
     
     user = get_user_by_id(user_id)
     if not is_admin(user):
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     project_ref = db.collection('projects').document(project_id)
     if not project_ref.get().exists:
-        return flask.jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found'}), 404
     
     data = request.get_json()
     comment_text = data.get('comment')
     if not comment_text:
-        return flask.jsonify({'error': 'Comment cannot be empty'}), 400
+        return jsonify({'error': 'Comment cannot be empty'}), 400
     
     comment_data = {
         'project_id': project_id,
         'admin_id': user_id,
         'comment': comment_text,
-        'created_at': datetime.utcnow()
+        'created_at': datetime.now(timezone.utc)
     }
     
     db.collection('project_comments').add(comment_data)
-    return flask.jsonify({'message': 'Comment added'}), 201
+    return jsonify({'message': 'Comment added'}), 201
 
 @app.route('/admin/api/assign-project/<project_id>', methods=['POST'])
 def admin_assign_project(project_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorised'}), 401
+        return jsonify({'error': 'Unauthorised'}), 401
     
     user = get_user_by_id(user_id)
     if not is_admin(user):
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     project_ref = db.collection('projects').document(project_id)
     if not project_ref.get().exists:
-        return flask.jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found'}), 404
     
     project_ref.update({'assigned_admin_id': user_id})
-    return flask.jsonify({'message': 'Project assigned successfully'}), 200
-
-
-
-
+    return jsonify({'message': 'Project assigned successfully'}), 200
 @app.route('/api/project-hours', methods=['GET'])
 def get_project_hours():
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'Error': 'Unauthorised'}), 401
+        return jsonify({'error': 'Unauthorised'}), 401
     
     user = get_user_by_id(user_id)
     if not user or not user.get('slack_id'):
-        return flask.jsonify({'Error': 'Not logged into Hackatime!'}), 404
+        return jsonify({'hours': 0, 'message': 'Not connected to Hackatime'}), 200
     
     project_name = request.args.get('project-name') or request.args.get('project_name')
     if not project_name:
-        return flask.jsonify({'Error': 'No Project Name'}), 400
+        return jsonify({'hours': 0, 'message': 'No project name provided'}), 200
     
     try:
         url = f'{HACKATIME_BASE_URL}/users/{user["slack_id"]}/stats?features=projects'
@@ -554,13 +682,17 @@ def get_project_hours():
             for proj in raw_projects:
                 if proj.get('name') == project_name:
                     hours = proj.get('total_seconds', 0) / 3600
-                    return flask.jsonify({'hours': round(hours, 2)}), 200
-            return flask.jsonify({'hours': 0, 'message': 'Project not Found'}), 200
+                    return jsonify({'hours': round(hours, 2)}), 200
+            return jsonify({'hours': 0, 'message': 'Project not found'}), 200
         else:
-            return flask.jsonify({'Error': 'Failed to fetch from hackatime'}), 500
+            print(f"Hackatime API returned {response.status_code}")
+            return jsonify({'hours': 0, 'message': 'Could not fetch from Hackatime'}), 200
+    except requests.exceptions.Timeout:
+        print(f"Timeout fetching hours for {project_name}")
+        return jsonify({'hours': 0, 'message': 'Hackatime timeout'}), 200
     except Exception as e:
-        print(f"Error fetching hours {e}")
-        return flask.jsonify({'Error': 'Internal Server Error'}), 500
+        print(f"Error fetching hours: {e}")
+        return jsonify({'hours': 0, 'message': 'Error fetching hours'}), 200
 
 @app.route('/leaderboard')
 def leaderboard():
@@ -576,12 +708,11 @@ def leaderboard():
         u_data = u.to_dict()
         u_data['id'] = u.id
         
-        # get approved proj
-        approved_projects = db.collection('projects').where('user_id', '==', u.id).where('status', '==', 'approved').stream()
+        all_projects_query = db.collection('projects').where('user_id', '==', u.id).stream()
+        approved_projects = [p for p in all_projects_query if p.to_dict().get('status') == 'approved']
+        
         total_hours = sum(p.to_dict().get('approved_hours', 0) for p in approved_projects)
-    
-        approved_projects = db.collection('projects').where('user_id', '==', u.id).where('status', '==', 'approved').stream()
-        projects_count = len(list(approved_projects))
+        projects_count = len(approved_projects)
         
         if total_hours > 0:
             users_data.append({
@@ -608,35 +739,35 @@ def shop():
 def admin_award_tiles(project_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     
     user = get_user_by_id(user_id)
     if not is_admin(user):
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     project_ref = db.collection('projects').document(project_id)
     project_doc = project_ref.get()
     
     if not project_doc.exists:
-        return flask.jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found'}), 404
     
     project = project_doc.to_dict()
     data = request.get_json()
     tiles_amount = int(data.get('tiles', 0))
     
     if tiles_amount <= 0:
-        return flask.jsonify({'error': 'Invalid tiles amount'}), 400
+        return jsonify({'error': 'Invalid tiles amount'}), 400
     
     project_user_id = project['user_id']
     project_user_ref = db.collection('users').document(project_user_id)
     project_user = project_user_ref.get().to_dict()
     
-    current_balance = project_user.get('tiles_balance')
+    current_balance = project_user.get('tiles_balance', 0)
     new_balance = current_balance + tiles_amount
     
     project_user_ref.update({'tiles_balance': new_balance})
     
-    return flask.jsonify({
+    return jsonify({
         'message': 'Tiles awarded successfully',
         'new_balance': new_balance
     }), 200
@@ -645,18 +776,18 @@ def admin_award_tiles(project_id):
 def admin_add_theme():
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized'}), 401
     
     user = get_user_by_id(user_id)
     if not is_admin(user):
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     data = request.get_json()
     theme_name = data.get('name')
     theme_description = data.get('description', '')
     
     if not theme_name:
-        return flask.jsonify({'error': 'Theme name is required'}), 400
+        return jsonify({'error': 'Theme name is required'}), 400
     
     theme_data = {
         'name': theme_name,
@@ -668,7 +799,7 @@ def admin_add_theme():
     theme_ref = db.collection('themes').document()
     theme_ref.set(theme_data)
     
-    return flask.jsonify({
+    return jsonify({
         'message': 'Theme added successfully',
         'theme': {
             'id': theme_ref.id,
@@ -691,24 +822,24 @@ def get_themes():
             'description': theme.get('description')
         })
     
-    return flask.jsonify({'themes': themes}), 200
+    return jsonify({'themes': themes}), 200
 
 @app.route('/admin/api/delete-theme/<theme_id>', methods=['DELETE'])
 def admin_delete_theme(theme_id):
     user_id = session.get('user_id')
     if not user_id:
-        return flask.jsonify({'error': 'Unauthorised'}), 401
+        return jsonify({'error': 'Unauthorised'}), 401
     
     user = get_user_by_id(user_id)
     if not is_admin(user):
-        return flask.jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden'}), 403
     
     theme_ref = db.collection('themes').document(theme_id)
     if not theme_ref.get().exists:
-        return flask.jsonify({'error': 'Theme not found'}), 404
+        return jsonify({'error': 'Theme not found'}), 404
     
     theme_ref.update({'is_active': False})
-    return flask.jsonify({'message': 'Theme deleted successfully'}), 200
+    return jsonify({'message': 'Theme deleted successfully'}), 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 4000))

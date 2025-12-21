@@ -1,28 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=Bungee+Spice&family=Jersey+25&family=Momo+Trust+Display&display=swap');
-:root{
-    /*Source of Colors: https://coolors.co/e63946-2a9d8f-f1faee-f4d35e-4caf50 */
+@import url('https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap');
+
+:root {
     --punch-red: #e63946;
     --pine-green: #2a9d8f;
     --honeydew: #f1faee;
     --royal-gold: #f4d35e;
-    --medium-jungle: #4caf50; /* what are these coolors.co names? */
+    --medium-jungle: #4caf50;
     --dark-grey: #2c3850;
     --light-grey: #ecf0f1;
 }
+
 * {
     box-sizing: border-box;
 }
-body{
+
+body {
     margin: 0;
     background-color: var(--honeydew);
     font-family: 'Momo Trust Display', sans-serif;
     overflow-x: hidden;
 }
-/*NAVBAR*/
-#navbar{
+
+#navbar {
     display: flex;
     flex-direction: row;
-    justify-content:space-between;
+    justify-content: space-between;
     gap: 10px;
     font-family: 'Momo Trust Display', sans-serif;
     background: var(--punch-red);
@@ -31,80 +33,90 @@ body{
     top: 0;
     z-index: 100;
     padding: 10px 20px;
-    box-shadow: 0px 2px 10px black;
 }
-#part1{
+
+#part1 {
     display: flex;
     flex-direction: row;
     justify-content: flex-start;
     gap: 15px;
     align-items: center;
 }
-#part2{
+
+#part2 {
     font-size: 24px;
     font-weight: bold;
 }
-.nav-part{
+
+.nav-part {
     transition: all 0.3s ease-in-out;
     cursor: pointer;
     padding: 5px 10px;
     border-radius: 5px;
 }
-.nav-part:hover{
+
+.nav-part:hover {
     text-shadow: 0px 0px 20px var(--royal-gold);
     background-color: rgba(255, 255, 255, 0.2);
 }
-.current{
+
+.current {
     text-decoration: underline;
     text-decoration-thickness: 3px;
     text-underline-offset: 5px;
 }
-.admin-link{
+
+.admin-link {
     background-color: var(--royal-gold);
     color: var(--dark-grey);
     font-weight: bold;
 }
-.shop-container{
+
+.shop-container {
     max-width: 1200px;
     margin: 40px auto;
     padding: 0 30px;
     position: relative;
     z-index: 5;
 }
+
 .shop-header {
     text-align: center;
     margin-bottom: 50px;
 }
+
 .shop-header h1 {
-    font-size: 30px;
+    font-size: 42px;
     color: var(--dark-grey);
     margin-bottom: 20px;
 }
-.balance-display{
+
+.balance-display {
     display: inline-flex;
     align-items: center;
     gap: 15px;
     background-color: white;
-    padding: 10px 20px;
+    padding: 20px 30px;
     border-radius: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
-.balance-display {
-    font-size: 30px;
+
+.balance-display .material-symbols-outlined {
+    font-size: 48px;
     color: var(--royal-gold);
 }
-.materials-symbols-outlined{
-    font-size: 48px;
-}
+
 .balance-amount {
-    font-size: 30px;
+    font-size: 36px;
     font-weight: bold;
     color: var(--dark-grey);
 }
-.balance-label{
-    font-size: 24px;
+
+.balance-label {
+    font-size: 20px;
     color: #666;
 }
+
 .construction-banner {
     background: white;
     border-radius: 20px;
@@ -113,17 +125,20 @@ body{
     text-align: center;
     border: 4px dashed var(--royal-gold);
 }
-.construction-content{
+
+.construction-content {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 30px;
 }
+
 .construction-icon {
-    font-size: 120px;
+    font-size: 120px !important;
     color: var(--royal-gold);
     animation: rotate 2s linear infinite;
 }
+
 @keyframes rotate {
     from {
         transform: rotate(0deg);
@@ -132,21 +147,25 @@ body{
         transform: rotate(360deg);
     }
 }
-.construction-content h2{
-    font-size: 28px;
+
+.construction-content h2 {
+    font-size: 32px;
     color: var(--dark-grey);
-    margin-bottom: 15px;
+    margin: 0 0 15px 0;
 }
-.construction-content p{
-    font-size: 20px;
+
+.construction-content p {
+    font-size: 18px;
     color: #666;
     margin: 10px 0;
 }
+
 .coming-soon {
     font-weight: bold;
     color: var(--pine-green);
-    margin-top: 20px;
+    margin-top: 20px !important;
 }
+
 #decor {
     position: fixed;
     top: 0;
@@ -166,6 +185,50 @@ body{
     object-fit: contain;
     opacity: 0.3;
 }
-#special{
-    transform: scale(2);
+
+@media (max-width: 768px) {
+    .shop-container {
+        padding: 0 15px;
+    }
+    
+    .shop-header h1 {
+        font-size: 32px;
+    }
+    
+    .balance-display {
+        padding: 15px 20px;
+    }
+    
+    .balance-display .material-symbols-outlined {
+        font-size: 36px;
+    }
+    
+    .balance-amount {
+        font-size: 28px;
+    }
+    
+    .balance-label {
+        font-size: 16px;
+    }
+    
+    .construction-banner {
+        padding: 40px 20px;
+    }
+    
+    .construction-content {
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .construction-icon {
+        font-size: 80px !important;
+    }
+    
+    .construction-content h2 {
+        font-size: 24px;
+    }
+    
+    .construction-content p {
+        font-size: 16px;
+    }
 }
