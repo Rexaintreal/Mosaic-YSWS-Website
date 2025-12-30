@@ -7,6 +7,18 @@
     <title>Register for Mosaic</title>
 </head>
 <body>
+    <div id="welcome"></div>
+
+    <nav class="top-nav">
+        <a href="https://hackclub.com">
+            <img src="{{ url_for('static', filename='images/flagtop.png')}}" alt="Hack Club Flag" class="nav-flag">
+        </a>
+        
+        <a href="https://hackclub.com">
+            <img src="{{ url_for('static', filename='images/hackclublogo.png')}}" alt="Hack Club Logo" class="nav-logo">
+        </a>
+    </nav>
+
     <div id="container">
         <h1>Login to Mosaic</h1>
         <a href="{{ hackclub_auth_url }}" class="auth-btn hackclub-btn">
@@ -14,6 +26,27 @@
             Sign in with Hack Club
         </a>
     </div>
-    <script src="{{url_for('static', filename='js/signin.js')}}"></script>
+
+    <div id="snow-container"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const snowContainer = document.getElementById('snow-container');
+            const snowflakeCount = 50; 
+
+            for (let i = 0; i < snowflakeCount; i++) {
+                let flake = document.createElement('div');
+                flake.classList.add('snowflake');
+                let size = Math.random() * 5 + 2 + 'px';
+                flake.style.width = size;
+                flake.style.height = size;
+                flake.style.left = Math.random() * 100 + 'vw';
+                flake.style.animationDuration = Math.random() * 3 + 2 + 's'
+                flake.style.animationDelay = Math.random() * 5 + 's';
+                
+                snowContainer.appendChild(flake);
+            }
+        });
+    </script>
 </body>
 </html>
