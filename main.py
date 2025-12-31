@@ -726,14 +726,14 @@ def leaderboard():
     
     return render_template('leaderboard.html', leaderboard=users_data, user=user)
 
-@app.route('/shop')
+@app.route('/market')
 def shop():
     user_id = session.get('user_id')
     if not user_id:
         return redirect('/signin')
     
     user = get_user_by_id(user_id)
-    return render_template('shop.html', user=user)
+    return render_template('soon.html', user=user)
 
 @app.route('/admin/api/award-tiles/<project_id>', methods=['POST'])
 def admin_award_tiles(project_id):
