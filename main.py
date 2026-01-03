@@ -15,7 +15,7 @@ app.secret_key = os.getenv("SECRET_KEY")
 
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-app.config['SESSION_COOKIE_SECURE'] = False  #change this in render to TRUE
+app.config['SESSION_COOKIE_SECURE'] = True  #change this in render to TRUE and false for local dev
 app.config['SESSION_COOKIE_HTTPONLY'] = True  #no js access
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  #CSRF 
 app.config['SESSION_COOKIE_NAME'] = 'mosaic_session'
