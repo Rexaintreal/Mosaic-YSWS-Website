@@ -1,6 +1,6 @@
 import os
 from flask import Flask, request, render_template, redirect, session, jsonify
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import requests
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -11,6 +11,19 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
+
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_COOKIE_SECURE'] = False  #change this in render to TRUE
+app.config['SESSION_COOKIE_HTTPONLY'] = True  #no js access
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  #CSRF 
+app.config['SESSION_COOKIE_NAME'] = 'mosaic_session'
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
+    if 'user_id' in session:
+        session.modified = True
 
 # firestore init
 cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase-credentials.json"))
