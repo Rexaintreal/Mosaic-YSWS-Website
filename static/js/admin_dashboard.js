@@ -9,6 +9,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadStats();
 });
 
+function formatHoursMinutes(decimalHours) {
+    if (!decimalHours || isNaN(decimalHours) || decimalHours === 0) {
+        return '0h 0m';
+    }
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours}h ${minutes}m`;
+}
+
 async function loadAllUsers() {
     const usersList = document.getElementById('users-list');
     usersList.innerHTML = `
@@ -32,7 +41,7 @@ async function loadAllUsers() {
             `;
             return;
         }
-        
+
         allUsers = data.users || [];
         renderUsers(allUsers);
         
@@ -46,14 +55,15 @@ async function loadAllUsers() {
         `;
     }
 }
-function renderUsers(users){
+
+function renderUsers(users) {
     const usersList = document.getElementById('users-list');
     
     if (users.length === 0) {
         usersList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No users found</p>';
         return;
     }
-    
+
     usersList.innerHTML = users.map(user => `
         <div class="user-item" data-user-id="${user.id}" data-user-name="${(user.name || '').toLowerCase()}" onclick="selectUser('${user.id}')">
             <div class="user-header">
@@ -85,7 +95,7 @@ function renderUsers(users){
                 ` : ''}
             </div>
             <div class="user-meta">
-                <span><i class="fas fa-clock"></i> ${user.total_hours.toFixed(2)} hrs</span>
+                <span title="Approved Hours"><i class="fas fa-clock"></i> ${formatHoursMinutes(user.total_hours || 0)}</span>
                 <span><i class="fas fa-dice"></i> ${user.tiles_balance} tiles</span>
             </div>
         </div>
@@ -124,6 +134,8 @@ async function selectUser(userId) {
 
 async function loadUserProjects(userId) {
     const projectsList = document.getElementById('projects-list');
+    const contentHeader = document.querySelector('.content-header');
+
     projectsList.innerHTML = `
         <div class="empty-message">
             <i class="fas fa-spinner fa-spin" style="font-size: 50px; color: var(--blue-accent);"></i>
@@ -145,7 +157,13 @@ async function loadUserProjects(userId) {
             `;
             return;
         }
-        
+        const userName = data.user_name || 'Unknown User';
+        const totalRawHours = data.total_raw_hours || 0;
+        contentHeader.innerHTML = `
+            <h1>${userName}'s Projects</h1>
+            <p>Total Hackatime Hours: <strong>${formatHoursMinutes(totalRawHours)}</strong></p>
+        `;
+
         if (data.projects && data.projects.length > 0) {
             const draftProjects = data.projects.filter(p => p.status === 'draft');
             const inReviewProjects = data.projects.filter(p => p.status === 'in_review');
@@ -153,7 +171,7 @@ async function loadUserProjects(userId) {
             const rejectedProjects = data.projects.filter(p => p.status === 'rejected');
             
             let html = '';
-            
+
             if (draftProjects.length > 0) {
                 html += `
                     <div class="project-section">
@@ -242,7 +260,8 @@ function renderProjectCards(projects) {
             <p class="project-description">${project.detail || 'No description'}</p>
             ${project.theme ? `<span class="theme-tag">${project.theme}</span>` : ''}
             <div class="project-meta-info">
-                <span><i class="fas fa-clock"></i> ${project.approved_hours || 0} hrs</span>
+                <span title="Approved Hours"><i class="fas fa-check-circle"></i> ${formatHoursMinutes(project.approved_hours || 0)}</span>
+                <span title="Raw Hours from Hackatime"><i class="fas fa-hourglass-half"></i> ${formatHoursMinutes(project.raw_hours || 0)}</span>
                 ${submittedDate ? `<span><i class="fas fa-calendar"></i> ${submittedDate}</span>` : ''}
             </div>
             <div class="project-actions">
@@ -299,7 +318,7 @@ async function loadStats() {
         statIds.forEach(id => {
             document.getElementById(id).textContent = '...';
         });
-        
+
         const response = await fetch('/api/admin-stats');
         const data = await response.json();
         
@@ -309,8 +328,8 @@ async function loadStats() {
             document.getElementById('stat-draft').textContent = data.draft_projects || 0;
             document.getElementById('stat-pending').textContent = data.pending_reviews || 0;
             document.getElementById('stat-approved').textContent = data.approved_projects || 0;
-            document.getElementById('stat-total-hours').textContent = data.total_hours || 0;
-            document.getElementById('stat-raw-hours').textContent = data.raw_hours || 0;
+            document.getElementById('stat-total-hours').textContent = formatHoursMinutes(data.total_hours || 0);
+            document.getElementById('stat-raw-hours').textContent = formatHoursMinutes(data.raw_hours || 0);
             document.getElementById('stat-total-tiles').textContent = data.total_tiles_awarded || 0;
         } else {
             console.error('Error loading stats:', data.error);
@@ -340,7 +359,7 @@ async function viewProject(projectId) {
     try {
         const response = await fetch(`/api/project-details/${projectId}`);
         const project = await response.json();
-        
+
         if (!response.ok) {
             await showAlert('Error loading project details', 'error');
             document.getElementById('review-modal').classList.add('hidden');
@@ -360,7 +379,7 @@ async function viewProject(projectId) {
                 </div>
                 <div class="info-item">
                     <div class="info-label">Raw Hours (Hackatime)</div>
-                    <div class="info-value">${project.raw_hours}</div>
+                    <div class="info-value">${formatHoursMinutes(project.raw_hours || 0)}</div>
                 </div>
                 ${project.languages ? `
                     <div class="info-item">
@@ -465,37 +484,37 @@ async function submitReview(event, projectId) {
     try {
         const reviewResponse = await fetch(`/admin/api/review-project/${projectId}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 approved_hours: approvedHours,
                 theme: theme,
                 status: status,
             })
         });
-        
+
         if (!reviewResponse.ok) {
             await showAlert('Error updating project review!', 'error');
             return;
         }
-        
+
         if (comment.trim()) {
             const commentResponse = await fetch(`/admin/api/comment-project/${projectId}`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({comment: comment})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comment: comment })
             });
             if (!commentResponse.ok) {
                 console.error('Error adding comment');
             }
         }
-        
+
         if (tilesAmount && parseInt(tilesAmount) > 0) {
             const tilesResponse = await fetch(`/admin/api/award-tiles/${projectId}`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({tiles: parseInt(tilesAmount)})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tiles: parseInt(tilesAmount) })
             });
-            
+
             if (!tilesResponse.ok) {
                 console.error('Error awarding tiles');
                 await showAlert('Review saved but error awarding tiles!', 'warning');
@@ -504,7 +523,7 @@ async function submitReview(event, projectId) {
                 return;
             }
         }
-    
+
         await showAlert('Review saved successfully!', 'success');
         closeReviewModal();
         await refreshAfterAction();
@@ -522,12 +541,12 @@ async function awardTiles(projectId) {
     }
     const confirmed = await showConfirm(`Award ${tilesAmount} tiles to this user?`);
     if (!confirmed) return;
-    
+
     try {
         const response = await fetch(`/admin/api/award-tiles/${projectId}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({tiles: parseInt(tilesAmount)})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tiles: parseInt(tilesAmount) })
         });
 
         if (response.ok) {
@@ -544,13 +563,18 @@ async function awardTiles(projectId) {
 }
 
 async function quickReject(projectId) {
-    const comment = prompt('Please provide a reason for rejection:');
+    const comment = await showPrompt(
+        'Please provide a reason for rejection:',
+        'Rejection Reason',
+        'e.g., Project does not meet theme requirements, incomplete functionality, etc.'
+    );
+    
     if (!comment) return;
 
     try {
         const reviewResponse = await fetch(`/admin/api/review-project/${projectId}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 status: 'rejected',
                 approved_hours: 0
@@ -562,8 +586,8 @@ async function quickReject(projectId) {
         }
         await fetch(`/admin/api/comment-project/${projectId}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({'comment': comment})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 'comment': comment })
         });
         await showAlert('Project rejected successfully', 'success');
         closeReviewModal();
@@ -590,8 +614,8 @@ async function submitTheme(event) {
     try {
         const response = await fetch('/admin/api/add-theme', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name, description})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
         });
         if (response.ok) {
             await showAlert('Theme added successfully!', 'success');

@@ -3,10 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico')}}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/mosaic.png')}}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:title" content="Mosaic">
+    <meta property="og:description" content="Build a website every month with a different theme. Get stuff. Repeat.">
+    <meta property="og:image" content="{{ url_for('static', filename='images/mosaic.png', _external=True) }}">
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="{{ request.url }}">
+    <meta property="twitter:title" content="Mosaic">
+    <meta property="twitter:description" content="Build a website every month with a different theme. Get stuff. Repeat.">
+    <meta property="twitter:image" content="{{ url_for('static', filename='images/mosaic.png', _external=True) }}">
     <title>{% block title %}Mosaic Dashboard {% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css')}}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico')}}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modal_styles.css')}}">
 </head>
 <body>
     <nav id="navbar">
@@ -39,6 +51,11 @@
             </div>
             
             <div id="projects-list">
+                {% if not saved_projects %}
+                <div class="empty-projects-message">
+                    No Projects yet?
+                </div>
+                {% else %}
                 {% for sp in saved_projects %}
                 <div class="project-card" 
                      data-project-id="{{sp.id}}" 
@@ -56,23 +73,31 @@
                     </div>
                 </div>
                 {% endfor %}
+                {% endif %}
             </div>
         </div>
 
         <div id="right-side">
-            <div id="empty-state" {% if saved_projects %}style="display: none;"{% endif %}>
+            {% if not saved_projects %}
+            <div id="empty-state">
+                <img src="{{ url_for('static', filename='images/buildsmth.png')}}" alt="Build Something" class="empty-image">
+            </div>
+            {% else %}
+            <div id="empty-state" style="display: none;">
                 <p class="empty-message">No Tile-work selected...</p>
             </div>
             
-            <div id="project-info" {% if not saved_projects %}style="display: none;"{% endif %}>
+            <div id="project-info">
             </div>
+            {% endif %}
             
             <div id="bottom-info">
                 <div class="info-card tiles-balance">
                     Current Balance: {{ user.tiles_balance if user.tiles_balance else 0 }} Tiles
                 </div>
                 <div class="info-card current-theme">
-                    Current Theme: <span id="theme-name">Loading...</span>
+                    <span class="theme-name" id="theme-name">Current Theme: Loading...</span>
+                    <span class="theme-description" id="theme-description"></span>
                 </div>
             </div>
         </div>
