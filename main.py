@@ -401,7 +401,8 @@ def get_all_users():
                 'in_review_count': in_review_count,
                 'approved_count': approved_count,
                 'rejected_count': rejected_count,
-                'total_hours': total_hours
+                'total_hours': total_hours,
+                'raw_hours': 0
             })
         
         return jsonify({'users': users_list}), 200
@@ -495,9 +496,34 @@ def get_user_projects(user_id):
         projects = []
         projects_ref = db.collection('projects').where('user_id', '==', user_id).stream()
         
+        user = get_user_by_id(user_id)
+        hackatime_projects = {}
+        total_raw_hours = 0
+        
+        if user and user.get('slack_id'):
+            try:
+                url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats?features=projects"
+                headers = autoconnectHackatime()
+                response = requests.get(url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_projects = data.get("data", {}).get('projects', [])
+                    for proj in raw_projects:
+                        hackatime_projects[proj.get('name')] = proj.get('total_seconds', 0) / 3600
+            except Exception as e:
+                print(f"Error fetching Hackatime data for user {user_id}: {e}")
+        
         for proj in projects_ref:
             proj_data = proj.to_dict()
             proj_data['id'] = proj.id
+            hackatime_name = proj_data.get('hackatime_project')
+            if hackatime_name and hackatime_name in hackatime_projects:
+                proj_data['raw_hours'] = round(hackatime_projects[hackatime_name], 2)
+                total_raw_hours += hackatime_projects[hackatime_name]
+            else:
+                proj_data['raw_hours'] = 0
+            
             if 'created_at' in proj_data:
                 proj_data['created_at'] = serialize_timestamp(proj_data['created_at'])
             if 'submitted_at' in proj_data:
@@ -508,7 +534,11 @@ def get_user_projects(user_id):
         
         projects.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
-        return jsonify({'projects': projects}), 200
+        return jsonify({
+            'projects': projects,
+            'total_raw_hours': round(total_raw_hours, 2),
+            'user_name': user.get('name') if user else 'Unknown'
+        }), 200
     except Exception as e:
         print(f"Error fetching user projects: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
