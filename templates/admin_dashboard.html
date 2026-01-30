@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/modal_styles.css')}}">
 </head>
 <body>
-    <nav id="navbar">
+<nav id="navbar">
         <div class="nav-tab" onclick="window.location.href='/dashboard'">
             The Studio
         </div>
@@ -29,10 +29,13 @@
             Leaderboard
         </div>
         <div class="nav-tab" onclick="window.location.href='/market'">
-            <i class="fas fa-lock"></i> Market
+            Market
         </div>
         <div class="nav-tab active">
             Admin Dashboard
+        </div>
+        <div class="nav-tab" onclick="window.location.href='/admin/market'">
+            Market Admin
         </div>
         <div class="nav-tab" onclick="window.location.href='/admin/audit-logs'">
             Audit Logs

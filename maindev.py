@@ -7,11 +7,18 @@ from audit_logger import audit_logger, ActionTypes
 from db_init import db_manager
 from dotenv import load_dotenv
 from functools import wraps
+from werkzeug.utils import secure_filename
+from PIL import Image
+import uuid
+import traceback
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
+UPLOAD_FOLDER = 'static/products'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_FILE_SIZE = 5 * 1024 * 1024 
 
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
@@ -45,6 +52,27 @@ if not HACKATIME_API_KEY:
 if not HACKCLUB_CLIENT_ID or not HACKCLUB_CLIENT_SECRET:
     print("WARNING: Hack Club OAuth credentials not configured!")
 
+#cehck filename
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def optimize_image(image_path, max_size=(800, 800)):
+    try:
+        with Image.open(image_path) as img:
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            img.save(image_path, 'JPEG', quality=85, optimize=True)
+            return True
+    except Exception as e:
+        print(f"Error optimizing image: {e}")
+        return False
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -66,7 +94,7 @@ def admin_required(f):
             logger.log_action(
                 action_type=ActionTypes.UNAUTHORIZED_ADMIN_ACCESS_ATTEMPT,
                 user_id=user_id,
-                user_name=user.get('name') if user else 'Unknown',
+                user_name=user['name'] if user else 'Unknown',
                 details={
                     'endpoint': request.endpoint,
                     'method': request.method,
@@ -96,7 +124,7 @@ def protect_admin_routes():
             logger.log_action(
                 action_type=ActionTypes.UNAUTHORIZED_ADMIN_ACCESS_ATTEMPT,
                 user_id=user_id,
-                user_name=user.get('name') if user else 'Unknown',
+                user_name=user['name'] if user else 'Unknown',
                 details={'path': request.path, 'method': request.method}
             )
             return redirect('/dashboard')
@@ -257,7 +285,7 @@ def hackclub_callback():
                 WHERE id = ?
             ''', (
                 access_token, refresh_token, slack_id,
-                f"{first_name} {last_name}" if first_name and last_name else user.get('name'),
+                f"{first_name} {last_name}" if first_name and last_name else user['name'],
                 first_name, last_name, email, verification_status, user_id
             ))
         
@@ -269,7 +297,7 @@ def hackclub_callback():
         logger.log_action(
             action_type=ActionTypes.USER_LOGIN,
             user_id=user_id,
-            user_name=user.get('name'),
+            user_name=user['name'],
             details={
                 'slack_id': slack_id,
                 'email': email,
@@ -408,7 +436,7 @@ def add_project_api():
     logger.log_action(
         action_type=ActionTypes.PROJECT_CREATE,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         details={
             'project_id': project_id,
             'project_name': name,
@@ -447,7 +475,7 @@ def submit_project(project_id):
         logger.log_action(
             action_type=ActionTypes.UNAUTHORIZED_ACCESS_ATTEMPT,
             user_id=user_id,
-            user_name=user.get('name'),
+            user_name=user['name'],
             details={'project_id': project_id, 'action': 'submit_project'}
         )
         return jsonify({'error': 'Forbidden - Not your project'}), 403
@@ -490,7 +518,7 @@ def submit_project(project_id):
     logger.log_action(
         action_type=ActionTypes.PROJECT_SUBMIT,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         details={
             'project_id': project_id,
             'project_name': project.get('name'),
@@ -530,7 +558,7 @@ def delete_project(project_id):
         logger.log_action(
             action_type=ActionTypes.UNAUTHORIZED_DELETE_ATTEMPT,
             user_id=user_id,
-            user_name=user.get('name'),
+            user_name=user['name'],
             details={
                 'project_id': project_id,
                 'actual_owner': project.get('user_id'),
@@ -547,7 +575,7 @@ def delete_project(project_id):
         logger.log_action(
             action_type=ActionTypes.PROJECT_DELETE,
             user_id=user_id,
-            user_name=user.get('name'),
+            user_name=user['name'],
             details={
                 'project_id': project_id,
                 'project_name': project.get('name'),
@@ -594,7 +622,7 @@ def get_project_details(project_id):
         logger.log_action(
             action_type=ActionTypes.UNAUTHORIZED_ACCESS_ATTEMPT,
             user_id=user_id,
-            user_name=user.get('name'),
+            user_name=user['name'],
             details={
                 'project_id': project_id,
                 'owner': project.get('user_id'),
@@ -733,7 +761,582 @@ def leaderboard():
 def shop():
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)
-    return render_template('soon.html', user=user)
+    return render_template('market.html', user=user, is_admin=is_admin)
+
+@app.route('/admin/market')
+@admin_required
+def admin_market():
+    user_id = session.get('user_id')
+    user = get_user_by_id(user_id)
+    return render_template('admin_market.html', user=user)
+
+@app.route('/admin/api/market/items', methods=['GET'])
+@admin_required
+def get_admin_market_items():
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM market_items ORDER BY created_at DESC')
+        items = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'items': items}), 200
+    except Exception as e:
+        print(f"Error fetching market items: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/market/items', methods=['GET'])
+@login_required
+def get_market_items():
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM market_items WHERE is_active = 1 ORDER BY created_at DESC')
+        items = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'items': items}), 200
+    except Exception as e:
+        print(f"Error fetching market items: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/items', methods=['POST'])
+@admin_required
+def create_market_item():
+    try:
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+        price = request.form.get('price')
+        estimated_hours = request.form.get('estimated_hours', 0.0)
+        stock_quantity = request.form.get('stock_quantity', -1)
+        is_active = request.form.get('is_active', 'true').lower() == 'true'
+        
+        if not name or not price:
+            return jsonify({'error': 'Name and price are required'}), 400
+        
+        try:
+            price = int(price)
+            estimated_hours = float(estimated_hours) if estimated_hours else 0.0
+            stock_quantity = int(stock_quantity)
+        except ValueError:
+            return jsonify({'error': 'Invalid numeric values'}), 400
+        
+        image_url = request.form.get('image_url')
+
+        if not image_url and 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                if not allowed_file(file.filename):
+                    return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
+
+                if file_size > 5 * 1024 * 1024:
+                    return jsonify({'error': 'File size must be less than 5MB'}), 400
+
+                filename = f"{db_manager.generate_id()}.{file.filename.rsplit('.', 1)[1].lower()}"
+                filepath = os.path.join('static', 'products', filename)
+
+                try:
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    file.save(filepath)
+                    image_url = f'/static/products/{filename}'
+                except Exception as e:
+                    print(f"Error processing image: {e}")
+                    return jsonify({'error': 'Error processing image'}), 400
+
+        
+        item_id = db_manager.generate_id()
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO market_items 
+            (id, name, description, image_url, price, estimated_hours, stock_quantity, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            item_id,
+            name,
+            description,
+            image_url,
+            price,
+            estimated_hours,
+            stock_quantity,
+            1 if is_active else 0,
+            datetime.now(timezone.utc).isoformat()
+        ))
+        conn.commit()
+        conn.close()
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        logger.log_action(
+            action_type=ActionTypes.MARKET_ITEM_CREATE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'item_id': item_id,
+                'item_name': name,
+                'price': price
+            }
+        )
+        
+        return jsonify({'message': 'Item created successfully', 'item_id': item_id}), 201
+        
+    except Exception as e:
+        print(f"Error creating market item: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/items/<item_id>', methods=['PUT'])
+@admin_required
+def update_market_item(item_id):
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM market_items WHERE id = ?', (item_id,))
+        item = cursor.fetchone()
+        if not item:
+            conn.close()
+            return jsonify({'error': 'Item not found'}), 404
+        
+        name = request.form.get('name', item['name'])
+        description = request.form.get('description', item['description'] or '')
+        price = request.form.get('price')
+        estimated_hours = request.form.get('estimated_hours')
+        stock_quantity = request.form.get('stock_quantity')
+        is_active = request.form.get('is_active', 'true').lower() == 'true'
+        
+        try:
+            price = int(price) if price else item['price']
+            estimated_hours = float(estimated_hours) if estimated_hours else item['estimated_hours']
+            stock_quantity = int(stock_quantity) if stock_quantity else item['stock_quantity']
+        except ValueError:
+            conn.close()
+            return jsonify({'error': 'Invalid numeric values'}), 400
+        
+        new_image_url = request.form.get('image_url') 
+
+        if new_image_url:
+            image_url = new_image_url
+
+        elif 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                if not allowed_file(file.filename):
+                    conn.close()
+                    return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
+
+                if file_size > 5 * 1024 * 1024:
+                    conn.close()
+                    return jsonify({'error': 'File size must be less than 5MB'}), 400
+
+                if item['image_url'] and os.path.exists(item['image_url'].lstrip('/')):
+                    try:
+                        os.remove(item['image_url'].lstrip('/'))
+                    except:
+                        pass
+
+                filename = f"{db_manager.generate_id()}.{file.filename.rsplit('.', 1)[1].lower()}"
+                filepath = os.path.join('static', 'products', filename)
+
+                try:
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    file.save(filepath)
+                    image_url = f'/static/products/{filename}'
+                except Exception as e:
+                    print(f"Error processing image: {e}")
+                    conn.close()
+                    return jsonify({'error': 'Error processing image'}), 400
+        else:
+            image_url = item['image_url']
+
+        
+        cursor.execute('''
+            UPDATE market_items 
+            SET name = ?, description = ?, image_url = ?, price = ?, 
+                estimated_hours = ?, stock_quantity = ?, is_active = ?, 
+                updated_at = ?
+            WHERE id = ?
+        ''', (
+            name,
+            description,
+            image_url,
+            price,
+            estimated_hours,
+            stock_quantity,
+            1 if is_active else 0,
+            datetime.now(timezone.utc).isoformat(),
+            item_id
+        ))
+        conn.commit()
+        conn.close()
+        
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        logger.log_action(
+            action_type=ActionTypes.MARKET_ITEM_UPDATE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'item_id': item_id,
+                'item_name': name,
+                'price': price
+            }
+        )
+        
+        return jsonify({'message': 'Item updated successfully'}), 200
+        
+    except Exception as e:
+        print(f"Error updating market item: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/items/<item_id>', methods=['DELETE'])
+@admin_required
+def delete_market_item(item_id):
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM market_items WHERE id = ?', (item_id,))
+        item = cursor.fetchone()
+        if not item:
+            conn.close()
+            return jsonify({'error': 'Item not found'}), 404
+        
+        cursor.execute('DELETE FROM market_items WHERE id = ?', (item_id,))
+        conn.commit()
+        conn.close()
+        
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        logger.log_action(
+            action_type=ActionTypes.MARKET_ITEM_DELETE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'item_id': item_id,
+                'item_name': item['name']
+            }
+        )
+        
+        return jsonify({'message': 'Item deleted successfully'}), 200
+        
+    except Exception as e:
+        print(f"Error deleting market item: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/user/me', methods=['GET'])
+@login_required
+def get_current_user():
+    try:
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({
+            'user': {
+                'id': user['id'],
+                'name': user['name'],
+                'email': user['email'],
+                'slack_id': user['slack_id'],
+                'tiles_balance': user['tiles_balance']
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching user data: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/market/purchase', methods=['POST'])
+@login_required
+def purchase_item():
+    try:
+        data = request.get_json()
+        user_id = session.get('user_id')
+        
+        item_id = data.get('item_id')
+        quantity = data.get('quantity', 1)
+        contact_info = data.get('contact_info')
+        notes = data.get('notes')
+        
+        if not item_id or not contact_info:
+            return jsonify({'error': 'Item ID and contact info are required'}), 400
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM market_items WHERE id = ? AND is_active = 1', (item_id,))
+        item = cursor.fetchone()
+        if not item:
+            conn.close()
+            return jsonify({'error': 'Item not found or not available'}), 404
+        
+        if item['stock_quantity'] != -1 and item['stock_quantity'] < quantity:
+            conn.close()
+            return jsonify({'error': 'Insufficient stock'}), 400
+        
+        cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            conn.close()
+            return jsonify({'error': 'User not found'}), 404
+        
+        total_price = item['price'] * quantity
+        if user['tiles_balance'] < total_price:
+            conn.close()
+            return jsonify({'error': 'Insufficient tiles balance'}), 400
+    
+        order_id = db_manager.generate_id()
+        cursor.execute('''
+            INSERT INTO orders 
+            (id, user_id, item_id, quantity, total_price, status, contact_info, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            order_id,
+            user_id,
+            item_id,
+            quantity,
+            total_price,
+            'pending',
+            contact_info,
+            notes,
+            datetime.now(timezone.utc).isoformat()
+        ))
+        new_balance = user['tiles_balance'] - total_price
+        cursor.execute('UPDATE users SET tiles_balance = ? WHERE id = ?', (new_balance, user_id))
+        if item['stock_quantity'] != -1:
+            new_stock = item['stock_quantity'] - quantity
+            cursor.execute('UPDATE market_items SET stock_quantity = ? WHERE id = ?', (new_stock, item_id))
+        
+        conn.commit()
+        conn.close()
+        logger.log_action(
+            action_type=ActionTypes.MARKET_PURCHASE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'order_id': order_id,
+                'item_id': item_id,
+                'item_name': item['name'],
+                'quantity': quantity,
+                'total_price': total_price,
+                'new_balance': new_balance
+            }
+        )
+        
+        return jsonify({
+            'message': 'Purchase successful',
+            'order_id': order_id,
+            'new_balance': new_balance
+        }), 201
+        
+    except Exception as e:
+        print(f"Error processing purchase: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/market/my-orders', methods=['GET'])
+@login_required
+def get_my_orders():
+    try:
+        user_id = session.get('user_id')
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT o.*, m.name as item_name, m.image_url as item_image
+            FROM orders o
+            LEFT JOIN market_items m ON o.item_id = m.id
+            WHERE o.user_id = ?
+            ORDER BY o.created_at DESC
+        ''', (user_id,))
+        orders = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return jsonify({'orders': orders}), 200
+        
+    except Exception as e:
+        print(f"Error fetching user orders: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/orders', methods=['GET'])
+@admin_required
+def get_all_orders():
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT o.*, m.name as item_name, u.name as user_name, u.slack_id as user_slack_id
+            FROM orders o
+            LEFT JOIN market_items m ON o.item_id = m.id
+            LEFT JOIN users u ON o.user_id = u.id
+            ORDER BY o.created_at DESC
+        ''', ())
+        orders = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return jsonify({'orders': orders}), 200
+        
+    except Exception as e:
+        print(f"Error fetching orders: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/orders/<order_id>', methods=['PUT'])
+@admin_required
+def update_order_status(order_id):
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if not new_status or new_status not in ['pending', 'processing', 'fulfilled', 'cancelled']:
+            return jsonify({'error': 'Invalid status'}), 400
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+        order = cursor.fetchone()
+        if not order:
+            conn.close()
+            return jsonify({'error': 'Order not found'}), 404
+        
+        old_status = order['status']
+        if old_status == 'cancelled':
+            conn.close()
+            return jsonify({'error': 'Cannot change status of a cancelled order'}), 400
+        if new_status == 'cancelled' and old_status != 'cancelled':
+            cursor.execute('SELECT * FROM users WHERE id = ?', (order['user_id'],))
+            user = cursor.fetchone()
+            
+            if user:
+                new_balance = user['tiles_balance'] + order['total_price']
+                cursor.execute('''
+                    UPDATE users 
+                    SET tiles_balance = ?, updated_at = ? 
+                    WHERE id = ?
+                ''', (new_balance, datetime.now(timezone.utc).isoformat(), user['id']))
+                admin_user_id = session.get('user_id')
+                admin_user = get_user_by_id(admin_user_id)
+                logger.log_action(
+                    action_type=ActionTypes.TILES_BALANCE_CHANGE,
+                    user_id=admin_user_id,
+                    user_name=admin_user['name'],
+                    target_user_id=user['id'],
+                    details={
+                        'reason': 'order_cancelled_refund',
+                        'order_id': order_id,
+                        'amount': order['total_price'],
+                        'old_balance': user['tiles_balance'],
+                        'new_balance': new_balance
+                    }
+                )
+        
+        fulfilled_at = datetime.now(timezone.utc).isoformat() if new_status == 'fulfilled' else order['fulfilled_at']
+        cursor.execute('''
+            UPDATE orders 
+            SET status = ?, fulfilled_at = ?, updated_at = ?
+            WHERE id = ?
+        ''', (new_status, fulfilled_at, datetime.now(timezone.utc).isoformat(), order_id))
+        
+        conn.commit()
+        conn.close()
+        
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        if new_status == 'cancelled':
+            action_type = ActionTypes.MARKET_ORDER_CANCELLED
+        elif new_status == 'fulfilled':
+            action_type = ActionTypes.MARKET_ORDER_FULFILLED
+        else:
+            action_type = ActionTypes.MARKET_ORDER_UPDATE
+            
+        logger.log_action(
+            action_type=action_type,
+            user_id=user_id,
+            user_name=user['name'],
+            target_user_id=order['user_id'],
+            details={
+                'order_id': order_id,
+                'old_status': old_status,
+                'new_status': new_status,
+                'refunded': new_status == 'cancelled',
+                'refund_amount': order['total_price'] if new_status == 'cancelled' else 0
+            }
+        )
+        
+        return jsonify({
+            'message': 'Order status updated successfully',
+            'refunded': new_status == 'cancelled',
+            'refund_amount': order['total_price'] if new_status == 'cancelled' else 0
+        }), 200
+        
+    except Exception as e:
+        print(f"Error updating order status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/upload-image', methods=['POST'])
+@admin_required
+def upload_market_image():
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+        upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'market')
+        os.makedirs(upload_dir, exist_ok=True)
+        file_extension = file.filename.rsplit('.', 1)[1].lower()
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        try:
+            img = Image.open(file.stream)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            max_size = (800, 800)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            if file_extension in ['jpg', 'jpeg']:
+                img.save(file_path, 'JPEG', quality=85, optimize=True)
+            elif file_extension == 'png':
+                img.save(file_path, 'PNG', optimize=True)
+            elif file_extension == 'webp':
+                img.save(file_path, 'WEBP', quality=85, optimize=True)
+            else:
+                img.save(file_path, optimize=True)
+                
+        except ImportError:
+            print("PIL not available, saving without optimization")
+            file.seek(0)
+            file.save(file_path)
+        image_url = f"/static/uploads/market/{unique_filename}"
+        
+        return jsonify({'image_url': image_url}), 200
+        
+    except Exception as e:
+        print(f"Error uploading image: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500    
 
 @app.route('/api/themes', methods=['GET'])
 @login_required
@@ -1001,7 +1604,7 @@ def get_user_projects(user_id):
         return jsonify({
             'projects': projects,
             'total_raw_hours': round(total_raw_hours, 2),
-            'user_name': user.get('name') if user else 'Unknown',
+            'user_name': user['name'] if user else 'Unknown',
             'user_slack_id': user.get('slack_id') if user else None
         }), 200
     except Exception as e:
@@ -1059,7 +1662,7 @@ def admin_review_project(project_id):
     logger.log_action(
         action_type=action_type,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         target_user_id=project.get('user_id'),
         details={
             'project_id': project_id,
@@ -1117,7 +1720,7 @@ def admin_comment_project(project_id):
     logger.log_action(
         action_type=ActionTypes.ADMIN_COMMENT_PROJECT,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         target_user_id=project.get('user_id'),
         details={
             'project_id': project_id,
@@ -1195,7 +1798,7 @@ def admin_award_tiles(project_id):
     logger.log_action(
         action_type=ActionTypes.ADMIN_AWARD_TILES,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         target_user_id=project_user_id,
         details={
             'project_id': project_id,
@@ -1203,7 +1806,7 @@ def admin_award_tiles(project_id):
             'tiles_awarded': tiles_amount,
             'old_balance': current_balance,
             'new_balance': new_balance,
-            'recipient_name': project_user.get('name') if project_user else 'Unknown'
+            'recipient_name': project_user['name'] if project_user else 'Unknown'
         }
     )
     
@@ -1245,7 +1848,7 @@ def admin_add_theme():
     logger.log_action(
         action_type=ActionTypes.ADMIN_CREATE_THEME,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         details={
             'theme_id': theme_id,
             'theme_name': theme_name,
@@ -1289,7 +1892,7 @@ def admin_delete_theme(theme_id):
     logger.log_action(
         action_type=ActionTypes.ADMIN_DELETE_THEME,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         details={
             'theme_id': theme_id,
             'theme_name': theme.get('name')

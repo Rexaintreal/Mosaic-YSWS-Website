@@ -8,6 +8,10 @@ from audit_logger import audit_logger, ActionTypes
 from db_init import db_manager
 from dotenv import load_dotenv
 from functools import wraps
+from werkzeug.utils import secure_filename
+from PIL import Image
+import uuid
+import traceback
 
 load_dotenv()
 
@@ -20,6 +24,9 @@ app.wsgi_app = ProxyFix(
 	x_port=1
 )
 app.secret_key = os.getenv("SECRET_KEY")
+UPLOAD_FOLDER = 'static/products'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_FILE_SIZE = 5 * 1024 * 1024 
 
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
@@ -52,6 +59,27 @@ if not HACKATIME_API_KEY:
 
 if not HACKCLUB_CLIENT_ID or not HACKCLUB_CLIENT_SECRET:
     print("WARNING: Hack Club OAuth credentials not configured!")
+
+#cehck filename
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def optimize_image(image_path, max_size=(800, 800)):
+    try:
+        with Image.open(image_path) as img:
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            img.save(image_path, 'JPEG', quality=85, optimize=True)
+            return True
+    except Exception as e:
+        print(f"Error optimizing image: {e}")
+        return False
 
 def login_required(f):
     @wraps(f)
@@ -195,103 +223,136 @@ def hackclub_callback():
         "grant_type": "authorization_code"
     }
     
-    try:
-        token_response = requests.post(
-            f"{HACKCLUB_AUTH_BASE}/oauth/token",
-            data=token_payload, 
-            headers={"Content-Type": "application/x-www-form-urlencoded"}  
-        )
-        token_data = token_response.json()
-        
-        if not token_response.ok:
-            return f"Token exchange failed: {token_data.get('error', 'Unknown error')}", 400
-        
-        access_token = token_data.get("access_token")
-        refresh_token = token_data.get("refresh_token")
-        
-        identity_response = requests.get(
-            f"{HACKCLUB_AUTH_BASE}/api/v1/me",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        
-        if not identity_response.ok:
-            return "Failed to fetch user identity", 400
-        
-        identity_data = identity_response.json()
-        user_identity = identity_data.get("identity", {})
-        
-        identity_id = user_identity.get("id")
-        slack_id = user_identity.get("slack_id")
-        first_name = user_identity.get("first_name")
-        last_name = user_identity.get("last_name")
-        email = user_identity.get("primary_email")
-        verification_status = user_identity.get("verification_status")
-        
-        user = get_user_by_identity_id(identity_id)
-        is_new_user = user is None
+    token_url = f"{HACKCLUB_AUTH_BASE}/oauth/token"
+    token_response = requests.post(token_url, data=token_payload, timeout=10)
+    
+    if token_response.status_code != 200:
+        return f"Failed to exchange code for token: {token_response.text}", 400
+    
+    token_data = token_response.json()
+    access_token = token_data.get("access_token")
+    refresh_token = token_data.get("refresh_token")
+    
+    userinfo_url = f"{HACKCLUB_AUTH_BASE}/oauth/userinfo"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    userinfo_response = requests.get(userinfo_url, headers=headers, timeout=10)
+    
+    if userinfo_response.status_code != 200:
+        return f"Failed to fetch user info: {userinfo_response.text}", 400
+    
+    user_info = userinfo_response.json()
+    
+    identity_id = user_info.get("sub")
+    slack_id = user_info.get("slack_id")
+    name = user_info.get("name")
+    email = user_info.get("email")
+    verification_status = user_info.get("verification_status")
+    
+    given_name = user_info.get("given_name", "")
+    family_name = user_info.get("family_name", "")
+    
+    existing_user = get_user_by_identity_id(identity_id)
+    
+    if existing_user:
+        user_id = existing_user['id']
         
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
-        if not user:
-            user_id = db_manager.generate_id()
-            role = 'Admin' if slack_id in ADMIN_SLACK_IDS else 'User'
-            
-            cursor.execute('''
-                INSERT INTO users 
-                (id, identity_id, slack_id, name, first_name, last_name, email,
-                 verification_status, role, date_created, access_token, refresh_token, tiles_balance)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                user_id, identity_id, slack_id,
-                f"{first_name} {last_name}" if first_name and last_name else None,
-                first_name, last_name, email, verification_status, role,
-                datetime.now(timezone.utc).isoformat(),
-                access_token, refresh_token, 0
-            ))
-        else:
-            user_id = user['id']
-            cursor.execute('''
-                UPDATE users SET
-                    access_token = ?,
-                    refresh_token = ?,
-                    slack_id = ?,
-                    name = ?,
-                    first_name = ?,
-                    last_name = ?,
-                    email = ?,
-                    verification_status = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (
-                access_token, refresh_token, slack_id,
-                f"{first_name} {last_name}" if first_name and last_name else user.get('name'),
-                first_name, last_name, email, verification_status, user_id
-            ))
-        
+        cursor.execute('''
+            UPDATE users SET
+                slack_id = ?,
+                name = ?,
+                first_name = ?,
+                last_name = ?,
+                email = ?,
+                verification_status = ?,
+                access_token = ?,
+                refresh_token = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE identity_id = ?
+        ''', (
+            slack_id,
+            name,
+            given_name,
+            family_name,
+            email,
+            verification_status,
+            access_token,
+            refresh_token,
+            identity_id
+        ))
         conn.commit()
         conn.close()
+    else:
+        user_id = db_manager.generate_id()
         
+        is_admin_user = slack_id in ADMIN_SLACK_IDS
+        user_role = 'Admin' if is_admin_user else 'User'
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO users (
+                id, identity_id, slack_id, name, first_name, last_name,
+                email, verification_status, role, date_created,
+                hackatime_username, access_token, refresh_token, tiles_balance
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id,
+            identity_id,
+            slack_id,
+            name,
+            given_name,
+            family_name,
+            email,
+            verification_status,
+            user_role,
+            datetime.now(timezone.utc).isoformat(),
+            None,
+            access_token,
+            refresh_token,
+            0
+        ))
+        conn.commit()
+        conn.close()
+    
+    session['user_id'] = user_id
+    session.permanent = True
+    
+    user = get_user_by_id(user_id)
+    
+    logger.log_action(
+        action_type=ActionTypes.USER_LOGIN,
+        user_id=user_id,
+        user_name=user.get('name') if user else 'Unknown',
+        details={
+            'login_method': 'hackclub_oauth',
+            'verification_status': verification_status,
+            'is_new_user': not existing_user
+        }
+    )
+    
+    return redirect('/dashboard')
+
+@app.route('/logout')
+def logout():
+    user_id = session.get('user_id')
+    user_name = None
+    
+    if user_id:
         user = get_user_by_id(user_id)
-        session['user_id'] = user_id
+        user_name = user.get('name') if user else 'Unknown'
+    
+    session.clear()
+    
+    if user_id:
         logger.log_action(
-            action_type=ActionTypes.USER_LOGIN,
+            action_type=ActionTypes.USER_LOGOUT,
             user_id=user_id,
-            user_name=user.get('name'),
-            details={
-                'slack_id': slack_id,
-                'email': email,
-                'is_new_user': is_new_user,
-                'verification_status': verification_status
-            }
+            user_name=user_name
         )
-        if is_admin(user):
-            return redirect('/admin/dashboard')
-        return redirect('/dashboard')
-        
-    except Exception as e:
-        print(f"OAuth callback error: {e}")
-        return f"Authentication failed: {str(e)}", 500
+    
+    return redirect('/')
 
 @app.route('/dashboard')
 @login_required
@@ -300,116 +361,105 @@ def dashboard():
     user = get_user_by_id(user_id)
     
     if not user:
-        return redirect("/signin")
+        session.clear()
+        return redirect('/signin')
     
-    auto_connected = user.get('slack_id') is not None
-    projects = []
-    
-    if auto_connected:
-        try:
-            url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats?features=projects&&limit=1000&features=projects&start_date=2025-12-23"
-            headers = autoconnectHackatime()
-            response = requests.get(url, headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                data = response.json()
-                raw_projects = data.get("data", {}).get('projects', [])
-                if isinstance(raw_projects, list):
-                    projects = [{
-                        'name': proj.get('name'),
-                        'total_seconds': proj.get('total_seconds', 0),
-                        'detail': proj.get('description', '')
-                    } for proj in raw_projects]
-        except Exception as e:
-            print(f"Error Fetching Hackatime Projects {e}")
-    
-    #get saved proj
-    conn = db_manager.get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM projects WHERE user_id = ?', (user_id,))
-    saved_projects = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    stats = get_user_stats(user)
-    
-    return render_template(
-        "dashboard.html",
-        user=user,
-        auto_connected=auto_connected,
-        projects=projects,
-        saved_projects=saved_projects,
-        stats=stats
-    )
+    return render_template('dashboard.html', user=user)
 
-def get_user_stats(user):
-    stats = {
-        'total_hours': 0,
-        'completed_projects': 0,
-        'in_review_projects': 0
-    }
-    
-    if not user.get('slack_id'):
-        return stats
-    
-    try:
-        headers = autoconnectHackatime()
-        url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats"
-        response = requests.get(url, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            stats['total_hours'] = round(data.get('data', {}).get('total_seconds', 0) / 3600, 2)
-        
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND status = ?', 
-                      (user['id'], 'approved'))
-        stats['completed_projects'] = cursor.fetchone()['count']
-        
-        cursor.execute('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND status = ?', 
-                      (user['id'], 'in_review'))
-        stats['in_review_projects'] = cursor.fetchone()['count']
-        
-        conn.close()
-        
-    except Exception as e:
-        print(f"Error Fetching user stats: {e}")
-    
-    return stats
-
-@app.route("/api/add-project", methods=['POST'])
+@app.route('/api/user/hackatime-projects', methods=['GET'])
 @login_required
-def add_project_api():
+def get_user_hackatime_projects():
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)
     
     if not user:
         return jsonify({'error': 'User not found'}), 404
     
-    data = request.get_json()
-    name = data.get('name')
-    detail = data.get('detail')
-    hackatime_project = data.get('hack_project')
+    if not user.get('slack_id'):
+        return jsonify({'error': 'Slack ID not found for user'}), 400
     
-    #input validation
-    is_valid, error_msg = validate_project_name(name)
+    try:
+        url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats?features=projects"
+        headers = autoconnectHackatime()
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            return jsonify({'error': f'Failed to fetch Hackatime data: {response.text}'}), response.status_code
+        
+        data = response.json()
+        projects = data.get("data", {}).get('projects', [])
+        
+        return jsonify({
+            'projects': projects,
+            'message': 'Projects fetched successfully'
+        }), 200
+    
+    except Exception as e:
+        print(f"Error fetching Hackatime projects: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/projects', methods=['GET'])
+@login_required
+def get_projects():
+    user_id = session.get('user_id')
+    
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC', (user_id,))
+    rows = cursor.fetchall()
+    
+    projects = []
+    for row in rows:
+        project = dict(row)
+        
+        cursor.execute('''
+            SELECT pc.*, u.name as admin_name 
+            FROM project_comments pc
+            LEFT JOIN users u ON pc.admin_id = u.id
+            WHERE pc.project_id = ?
+            ORDER BY pc.created_at ASC
+        ''', (project['id'],))
+        comments = [dict(comment_row) for comment_row in cursor.fetchall()]
+        project['comments'] = comments
+        
+        projects.append(project)
+    
+    conn.close()
+    
+    return jsonify({'projects': projects}), 200
+
+@app.route('/api/projects', methods=['POST'])
+@login_required
+def create_project():
+    user_id = session.get('user_id')
+    user = get_user_by_id(user_id)
+    
+    data = request.get_json()
+    
+    project_name = data.get('name', '').strip()
+    is_valid, error_message = validate_project_name(project_name)
     if not is_valid:
-        return jsonify({'error': error_msg}), 400
+        return jsonify({'error': error_message}), 400
     
     project_id = db_manager.generate_id()
     
     conn = db_manager.get_connection()
     cursor = conn.cursor()
+    
     cursor.execute('''
         INSERT INTO projects 
-        (id, user_id, name, detail, hackatime_project, status, created_at,
-         total_seconds, approved_hours)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, user_id, name, detail, hackatime_project, status, created_at, total_seconds)
+        VALUES (?, ?, ?, ?, ?, 'draft', ?, 0)
     ''', (
-        project_id, user_id, name, detail, hackatime_project, 'draft',
-        datetime.now(timezone.utc).isoformat(), 0, 0.0
+        project_id,
+        user_id,
+        project_name,
+        data.get('detail', ''),
+        data.get('hackatime_project'),
+        datetime.now(timezone.utc).isoformat()
     ))
+    
     conn.commit()
     conn.close()
     
@@ -419,21 +469,90 @@ def add_project_api():
         user_name=user.get('name'),
         details={
             'project_id': project_id,
-            'project_name': name,
-            'hackatime_project': hackatime_project,
-            'detail': detail
+            'project_name': project_name,
+            'hackatime_project': data.get('hackatime_project')
         }
     )
     
     return jsonify({
-        'id': project_id,
-        'name': name,
-        'detail': detail,
-        'hackatime_project': hackatime_project,
-        'status': 'draft'
+        'message': 'Project created successfully',
+        'project_id': project_id
     }), 201
 
-@app.route("/api/submit-project/<project_id>", methods=['POST'])
+@app.route('/api/projects/<project_id>', methods=['PUT'])
+@login_required
+def update_project(project_id):
+    user_id = session.get('user_id')
+    user = get_user_by_id(user_id)
+    
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+    project_row = cursor.fetchone()
+    
+    if not project_row:
+        conn.close()
+        return jsonify({'error': 'Project not found or unauthorized'}), 404
+    
+    project = dict(project_row)
+    
+    if project.get('status') in ['approved', 'in_review']:
+        conn.close()
+        return jsonify({'error': 'Cannot edit project that is in review or approved'}), 403
+    
+    data = request.get_json()
+    
+    project_name = data.get('name', project['name']).strip()
+    is_valid, error_message = validate_project_name(project_name)
+    if not is_valid:
+        conn.close()
+        return jsonify({'error': error_message}), 400
+    
+    cursor.execute('''
+        UPDATE projects SET
+            name = ?,
+            detail = ?,
+            hackatime_project = ?,
+            screenshot_url = ?,
+            github_url = ?,
+            demo_url = ?,
+            summary = ?,
+            languages = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (
+        project_name,
+        data.get('detail', project['detail']),
+        data.get('hackatime_project', project['hackatime_project']),
+        data.get('screenshot_url', project['screenshot_url']),
+        data.get('github_url', project['github_url']),
+        data.get('demo_url', project['demo_url']),
+        data.get('summary', project['summary']),
+        data.get('languages', project['languages']),
+        project_id
+    ))
+    
+    conn.commit()
+    conn.close()
+    
+    logger.log_action(
+        action_type=ActionTypes.PROJECT_UPDATE,
+        user_id=user_id,
+        user_name=user.get('name'),
+        details={
+            'project_id': project_id,
+            'project_name': project_name,
+            'changes': {
+                'name_changed': project_name != project['name'],
+                'detail_changed': data.get('detail') != project['detail'],
+                'hackatime_project_changed': data.get('hackatime_project') != project['hackatime_project']
+            }
+        }
+    )
+    
+    return jsonify({'message': 'Project updated successfully'}), 200
+
+@app.route('/api/projects/<project_id>/submit', methods=['POST'])
 @login_required
 def submit_project(project_id):
     user_id = session.get('user_id')
@@ -441,54 +560,31 @@ def submit_project(project_id):
     
     conn = db_manager.get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
+    cursor.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
     project_row = cursor.fetchone()
     
     if not project_row:
         conn.close()
-        return jsonify({'error': 'Project not found'}), 404
+        return jsonify({'error': 'Project not found or unauthorized'}), 404
     
     project = dict(project_row)
     
-    if project.get('user_id') != user_id:
+    if project.get('status') == 'in_review':
         conn.close()
-        logger.log_action(
-            action_type=ActionTypes.UNAUTHORIZED_ACCESS_ATTEMPT,
-            user_id=user_id,
-            user_name=user.get('name'),
-            details={'project_id': project_id, 'action': 'submit_project'}
-        )
-        return jsonify({'error': 'Forbidden - Not your project'}), 403
+        return jsonify({'error': 'Project already submitted'}), 400
     
-    data = request.get_json()
-    
-    assigned_admin_id = None
-    if ADMIN_SLACK_IDS:
-        main_admin = get_user_by_slack_id(ADMIN_SLACK_IDS[0])
-        if main_admin:
-            assigned_admin_id = main_admin['id']
+    if not project.get('name') or not project.get('hackatime_project'):
+        conn.close()
+        return jsonify({'error': 'Project must have name and Hackatime project before submission'}), 400
     
     cursor.execute('''
         UPDATE projects SET
-            screenshot_url = ?,
-            github_url = ?,
-            demo_url = ?,
-            summary = ?,
-            languages = ?,
-            status = ?,
+            status = 'in_review',
             submitted_at = ?,
-            assigned_admin_id = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
     ''', (
-        data.get('screenshot_url'),
-        data.get('github_url'),
-        data.get('demo_url'),
-        data.get('summary'),
-        data.get('languages'),
-        'in_review',
         datetime.now(timezone.utc).isoformat(),
-        assigned_admin_id,
         project_id
     ))
     
@@ -502,38 +598,39 @@ def submit_project(project_id):
         details={
             'project_id': project_id,
             'project_name': project.get('name'),
-            'github_url': data.get('github_url'),
-            'demo_url': data.get('demo_url'),
-            'languages': data.get('languages')
+            'hackatime_project': project.get('hackatime_project')
         }
     )
     
     return jsonify({'message': 'Project submitted for review'}), 200
 
-@app.route('/api/delete-project/<project_id>', methods=['DELETE'])
+@app.route('/api/projects/<project_id>', methods=['DELETE'])
 @login_required
 def delete_project(project_id):
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)
     
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
     conn = db_manager.get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
+    cursor.execute('SELECT * FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
     project_row = cursor.fetchone()
     
     if not project_row:
         conn.close()
-        return jsonify({'error': 'Project not found'}), 404
+        logger.log_action(
+            action_type=ActionTypes.UNAUTHORIZED_DELETE_ATTEMPT,
+            user_id=user_id,
+            user_name=user.get('name') if user else 'Unknown',
+            details={
+                'project_id': project_id,
+                'reason': 'project_not_found_or_unauthorized'
+            }
+        )
+        return jsonify({'error': 'Project not found or unauthorized'}), 404
     
     project = dict(project_row)
     
-    is_owner = project.get('user_id') == user_id
-    is_admin_user = is_admin(user)
-    
-    if not is_owner and not is_admin_user:
+    if project.get('status') in ['approved', 'in_review']:
         conn.close()
         logger.log_action(
             action_type=ActionTypes.UNAUTHORIZED_DELETE_ATTEMPT,
@@ -541,207 +638,612 @@ def delete_project(project_id):
             user_name=user.get('name'),
             details={
                 'project_id': project_id,
-                'actual_owner': project.get('user_id'),
-                'project_status': project.get('status')
-            }
-        )
-        return jsonify({'error': 'Forbidden - Not your project'}), 403
-    
-    if not is_admin_user and project.get('status') != 'draft':
-        conn.close()
-        return jsonify({'error': 'Only draft projects can be deleted'}), 403
-    
-    try:
-        logger.log_action(
-            action_type=ActionTypes.PROJECT_DELETE,
-            user_id=user_id,
-            user_name=user.get('name'),
-            details={
-                'project_id': project_id,
                 'project_name': project.get('name'),
-                'project_status': project.get('status'),
-                'was_admin_delete': is_admin_user,
-                'approved_hours': project.get('approved_hours', 0)
+                'reason': f'cannot_delete_{project.get("status")}_project'
             }
         )
-        
-        cursor.execute('DELETE FROM project_comments WHERE project_id = ?', (project_id,))
-        cursor.execute('DELETE FROM projects WHERE id = ?', (project_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Project deleted successfully'}), 200
-    except Exception as e:
-        conn.close()
-        print(f"Error deleting project: {e}")
-        return jsonify({'error': 'Internal Server Error'}), 500
-
-@app.route("/api/project-details/<project_id>", methods=['GET'])
-@login_required
-def get_project_details(project_id):
-    user_id = session.get('user_id')
-    user = get_user_by_id(user_id)
+        return jsonify({'error': f'Cannot delete project that is {project.get("status")}'}), 403
     
-    conn = db_manager.get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
-    project_row = cursor.fetchone()
+    project_name = project.get('name')
     
-    if not project_row:
-        conn.close()
-        return jsonify({'error': 'Project not found'}), 404
-    
-    project = dict(project_row)
-    
-    # STRICT access control
-    is_owner = project.get('user_id') == user_id
-    is_admin_user = is_admin(user)
-    
-    if not is_owner and not is_admin_user:
-        conn.close()
-        logger.log_action(
-            action_type=ActionTypes.UNAUTHORIZED_ACCESS_ATTEMPT,
-            user_id=user_id,
-            user_name=user.get('name'),
-            details={
-                'project_id': project_id,
-                'owner': project.get('user_id'),
-                'action': 'view_project_details'
-            }
-        )
-        return jsonify({'error': 'Forbidden - Not your project'}), 403
-    
-    project_owner = get_user_by_id(project['user_id'])
-    project_owner_name = project_owner.get('name') if project_owner else 'Unknown User'
-
-    raw_hours = 0
-    if project.get('hackatime_project'):
-        project_user = get_user_by_id(project['user_id'])
-        if project_user and project_user.get('slack_id'):
-            try:
-                url = f"{HACKATIME_BASE_URL}/users/{project_user['slack_id']}/stats?features=projects"
-                headers = autoconnectHackatime()
-                response = requests.get(url, headers=headers, timeout=5)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    raw_projects = data.get("data", {}).get('projects', [])
-                    for proj in raw_projects:
-                        if proj.get('name') == project['hackatime_project']:
-                            raw_hours = round(proj.get('total_seconds', 0) / 3600, 2)
-                            break
-            except Exception as e:
-                print(f"Error Fetching Hackatime Projects {e}")
-    
-    cursor.execute('SELECT * FROM project_comments WHERE project_id = ?', (project_id,))
-    comments = []
-    for comment_row in cursor.fetchall():
-        comment = dict(comment_row)
-        admin = get_user_by_id(comment['admin_id'])
-        comments.append({
-            'admin_name': admin.get('name') if admin else 'Admin',
-            'comment': comment['comment'],
-            'created_at': comment.get('created_at')
-        })
-    
-    conn.close()
-    return jsonify({
-        'id': project['id'],
-        'name': project.get('name'),
-        'detail': project.get('detail'),
-        'hackatime_project': project.get('hackatime_project'),
-        'status': project.get('status'),
-        'raw_hours': raw_hours,
-        'approved_hours': project.get('approved_hours', 0),
-        'screenshot_url': project.get('screenshot_url'),
-        'github_url': project.get('github_url'),
-        'demo_url': project.get('demo_url'),
-        'summary': project.get('summary'),
-        'languages': project.get('languages'),
-        'theme': project.get('theme'),
-        'submitted_at': project.get('submitted_at'),
-        'reviewed_at': project.get('reviewed_at'),
-        'comments': comments,
-        'user_name': project_owner_name
-    }), 200
-
-@app.route('/api/project-hours', methods=['GET'])
-@login_required
-def get_project_hours():
-    user_id = session.get('user_id')
-    user = get_user_by_id(user_id)
-    
-    if not user or not user.get('slack_id'):
-        return jsonify({'hours': 0, 'message': 'Not connected to Hackatime'}), 200
-    
-    project_name = request.args.get('project-name') or request.args.get('project_name')
-    if not project_name:
-        return jsonify({'hours': 0, 'message': 'No project name provided'}), 200
-    
-    try:
-        url = f'{HACKATIME_BASE_URL}/users/{user["slack_id"]}/stats?features=projects'
-        headers = autoconnectHackatime()
-        response = requests.get(url=url, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            raw_projects = data.get("data", {}).get('projects', [])
-            for proj in raw_projects:
-                if proj.get('name') == project_name:
-                    hours = proj.get('total_seconds', 0) / 3600
-                    return jsonify({'hours': round(hours, 2)}), 200
-            return jsonify({'hours': 0, 'message': 'Project not found'}), 200
-        else:
-            return jsonify({'hours': 0, 'message': 'Could not fetch from Hackatime'}), 200
-    except Exception as e:
-        print(f"Error fetching hours: {e}")
-        return jsonify({'hours': 0, 'message': 'Error fetching hours'}), 200
-
-@app.route('/leaderboard')
-def leaderboard():
-    user_id = session.get('user_id')
-    user = None
-    if user_id:
-        user = get_user_by_id(user_id)
-    
-    users_data = []
-    conn = db_manager.get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM users')
-    all_users = [dict(row) for row in cursor.fetchall()]
-    
-    for u in all_users:
-        cursor.execute('''
-            SELECT COUNT(*) as count, SUM(approved_hours) as total_hours 
-            FROM projects 
-            WHERE user_id = ? AND status = ?
-        ''', (u['id'], 'approved'))
-        
-        result = cursor.fetchone()
-        projects_count = result['count']
-        total_hours = result['total_hours'] or 0
-        
-        if total_hours > 0:
-            users_data.append({
-                'name': u.get('name') or f'User #{u["id"]}',
-                'total_hours': round(total_hours, 2),
-                'projects_count': projects_count,
-                'tiles': u.get('tiles_balance', 0)
-            })
-    
+    cursor.execute('DELETE FROM projects WHERE id = ?', (project_id,))
+    conn.commit()
     conn.close()
     
-    users_data.sort(key=lambda x: x['total_hours'], reverse=True)
+    logger.log_action(
+        action_type=ActionTypes.PROJECT_DELETE,
+        user_id=user_id,
+        user_name=user.get('name'),
+        details={
+            'project_id': project_id,
+            'project_name': project_name,
+            'project_status': project.get('status')
+        }
+    )
     
-    return render_template('leaderboard.html', leaderboard=users_data, user=user)
+    return jsonify({'message': 'Project deleted successfully'}), 200
 
 @app.route('/market')
 @login_required
 def shop():
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)
-    return render_template('soon.html', user=user)
+    return render_template('market.html', user=user, is_admin=is_admin)
+
+@app.route('/admin/market')
+@admin_required
+def admin_market():
+    user_id = session.get('user_id')
+    user = get_user_by_id(user_id)
+    return render_template('admin_market.html', user=user)
+
+@app.route('/admin/api/market/items', methods=['GET'])
+@admin_required
+def get_admin_market_items():
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM market_items ORDER BY created_at DESC')
+        items = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'items': items}), 200
+    except Exception as e:
+        print(f"Error fetching market items: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/market/items', methods=['GET'])
+@login_required
+def get_market_items():
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM market_items WHERE is_active = 1 ORDER BY created_at DESC')
+        items = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'items': items}), 200
+    except Exception as e:
+        print(f"Error fetching market items: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/items', methods=['POST'])
+@admin_required
+def create_market_item():
+    try:
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+        price = request.form.get('price')
+        estimated_hours = request.form.get('estimated_hours', 0.0)
+        stock_quantity = request.form.get('stock_quantity', -1)
+        is_active = request.form.get('is_active', 'true').lower() == 'true'
+        
+        if not name or not price:
+            return jsonify({'error': 'Name and price are required'}), 400
+        
+        try:
+            price = int(price)
+            estimated_hours = float(estimated_hours) if estimated_hours else 0.0
+            stock_quantity = int(stock_quantity)
+        except ValueError:
+            return jsonify({'error': 'Invalid numeric values'}), 400
+        
+        image_url = request.form.get('image_url')
+
+        if not image_url and 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                if not allowed_file(file.filename):
+                    return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
+
+                if file_size > 5 * 1024 * 1024:
+                    return jsonify({'error': 'File size must be less than 5MB'}), 400
+
+                filename = f"{db_manager.generate_id()}.{file.filename.rsplit('.', 1)[1].lower()}"
+                filepath = os.path.join('static', 'products', filename)
+
+                try:
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    file.save(filepath)
+                    image_url = f'/static/products/{filename}'
+                except Exception as e:
+                    print(f"Error processing image: {e}")
+                    return jsonify({'error': 'Error processing image'}), 400
+
+        
+        item_id = db_manager.generate_id()
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO market_items 
+            (id, name, description, image_url, price, estimated_hours, stock_quantity, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            item_id,
+            name,
+            description,
+            image_url,
+            price,
+            estimated_hours,
+            stock_quantity,
+            1 if is_active else 0,
+            datetime.now(timezone.utc).isoformat()
+        ))
+        conn.commit()
+        conn.close()
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        logger.log_action(
+            action_type=ActionTypes.MARKET_ITEM_CREATE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'item_id': item_id,
+                'item_name': name,
+                'price': price
+            }
+        )
+        
+        return jsonify({'message': 'Item created successfully', 'item_id': item_id}), 201
+        
+    except Exception as e:
+        print(f"Error creating market item: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/items/<item_id>', methods=['PUT'])
+@admin_required
+def update_market_item(item_id):
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM market_items WHERE id = ?', (item_id,))
+        item = cursor.fetchone()
+        if not item:
+            conn.close()
+            return jsonify({'error': 'Item not found'}), 404
+        
+        name = request.form.get('name', item['name'])
+        description = request.form.get('description', item['description'] or '')
+        price = request.form.get('price')
+        estimated_hours = request.form.get('estimated_hours')
+        stock_quantity = request.form.get('stock_quantity')
+        is_active = request.form.get('is_active', 'true').lower() == 'true'
+        
+        try:
+            price = int(price) if price else item['price']
+            estimated_hours = float(estimated_hours) if estimated_hours else item['estimated_hours']
+            stock_quantity = int(stock_quantity) if stock_quantity else item['stock_quantity']
+        except ValueError:
+            conn.close()
+            return jsonify({'error': 'Invalid numeric values'}), 400
+        
+        new_image_url = request.form.get('image_url') 
+
+        if new_image_url:
+            image_url = new_image_url
+
+        elif 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                if not allowed_file(file.filename):
+                    conn.close()
+                    return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
+
+                if file_size > 5 * 1024 * 1024:
+                    conn.close()
+                    return jsonify({'error': 'File size must be less than 5MB'}), 400
+
+                if item['image_url'] and os.path.exists(item['image_url'].lstrip('/')):
+                    try:
+                        os.remove(item['image_url'].lstrip('/'))
+                    except:
+                        pass
+
+                filename = f"{db_manager.generate_id()}.{file.filename.rsplit('.', 1)[1].lower()}"
+                filepath = os.path.join('static', 'products', filename)
+
+                try:
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    file.save(filepath)
+                    image_url = f'/static/products/{filename}'
+                except Exception as e:
+                    print(f"Error processing image: {e}")
+                    conn.close()
+                    return jsonify({'error': 'Error processing image'}), 400
+        else:
+            image_url = item['image_url']
+
+        
+        cursor.execute('''
+            UPDATE market_items 
+            SET name = ?, description = ?, image_url = ?, price = ?, 
+                estimated_hours = ?, stock_quantity = ?, is_active = ?, 
+                updated_at = ?
+            WHERE id = ?
+        ''', (
+            name,
+            description,
+            image_url,
+            price,
+            estimated_hours,
+            stock_quantity,
+            1 if is_active else 0,
+            datetime.now(timezone.utc).isoformat(),
+            item_id
+        ))
+        conn.commit()
+        conn.close()
+        
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        logger.log_action(
+            action_type=ActionTypes.MARKET_ITEM_UPDATE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'item_id': item_id,
+                'item_name': name,
+                'price': price
+            }
+        )
+        
+        return jsonify({'message': 'Item updated successfully'}), 200
+        
+    except Exception as e:
+        print(f"Error updating market item: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/items/<item_id>', methods=['DELETE'])
+@admin_required
+def delete_market_item(item_id):
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM market_items WHERE id = ?', (item_id,))
+        item = cursor.fetchone()
+        if not item:
+            conn.close()
+            return jsonify({'error': 'Item not found'}), 404
+        
+        cursor.execute('DELETE FROM market_items WHERE id = ?', (item_id,))
+        conn.commit()
+        conn.close()
+        
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        logger.log_action(
+            action_type=ActionTypes.MARKET_ITEM_DELETE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'item_id': item_id,
+                'item_name': item['name']
+            }
+        )
+        
+        return jsonify({'message': 'Item deleted successfully'}), 200
+        
+    except Exception as e:
+        print(f"Error deleting market item: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/user/me', methods=['GET'])
+@login_required
+def get_current_user():
+    try:
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({
+            'user': {
+                'id': user['id'],
+                'name': user['name'],
+                'email': user['email'],
+                'slack_id': user['slack_id'],
+                'tiles_balance': user['tiles_balance']
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching user data: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/market/purchase', methods=['POST'])
+@login_required
+def purchase_item():
+    try:
+        data = request.get_json()
+        user_id = session.get('user_id')
+        
+        item_id = data.get('item_id')
+        quantity = data.get('quantity', 1)
+        contact_info = data.get('contact_info')
+        notes = data.get('notes')
+        
+        if not item_id or not contact_info:
+            return jsonify({'error': 'Item ID and contact info are required'}), 400
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM market_items WHERE id = ? AND is_active = 1', (item_id,))
+        item = cursor.fetchone()
+        if not item:
+            conn.close()
+            return jsonify({'error': 'Item not found or not available'}), 404
+        
+        if item['stock_quantity'] != -1 and item['stock_quantity'] < quantity:
+            conn.close()
+            return jsonify({'error': 'Insufficient stock'}), 400
+        
+        cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            conn.close()
+            return jsonify({'error': 'User not found'}), 404
+        
+        total_price = item['price'] * quantity
+        if user['tiles_balance'] < total_price:
+            conn.close()
+            return jsonify({'error': 'Insufficient tiles balance'}), 400
+    
+        order_id = db_manager.generate_id()
+        cursor.execute('''
+            INSERT INTO orders 
+            (id, user_id, item_id, quantity, total_price, status, contact_info, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            order_id,
+            user_id,
+            item_id,
+            quantity,
+            total_price,
+            'pending',
+            contact_info,
+            notes,
+            datetime.now(timezone.utc).isoformat()
+        ))
+        new_balance = user['tiles_balance'] - total_price
+        cursor.execute('UPDATE users SET tiles_balance = ? WHERE id = ?', (new_balance, user_id))
+        if item['stock_quantity'] != -1:
+            new_stock = item['stock_quantity'] - quantity
+            cursor.execute('UPDATE market_items SET stock_quantity = ? WHERE id = ?', (new_stock, item_id))
+        
+        conn.commit()
+        conn.close()
+        logger.log_action(
+            action_type=ActionTypes.MARKET_PURCHASE,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'order_id': order_id,
+                'item_id': item_id,
+                'item_name': item['name'],
+                'quantity': quantity,
+                'total_price': total_price,
+                'new_balance': new_balance
+            }
+        )
+        
+        return jsonify({
+            'message': 'Purchase successful',
+            'order_id': order_id,
+            'new_balance': new_balance
+        }), 201
+        
+    except Exception as e:
+        print(f"Error processing purchase: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/api/market/my-orders', methods=['GET'])
+@login_required
+def get_my_orders():
+    try:
+        user_id = session.get('user_id')
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT o.*, m.name as item_name, m.image_url as item_image
+            FROM orders o
+            LEFT JOIN market_items m ON o.item_id = m.id
+            WHERE o.user_id = ?
+            ORDER BY o.created_at DESC
+        ''', (user_id,))
+        orders = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return jsonify({'orders': orders}), 200
+        
+    except Exception as e:
+        print(f"Error fetching user orders: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/orders', methods=['GET'])
+@admin_required
+def get_all_orders():
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT o.*, m.name as item_name, u.name as user_name, u.slack_id as user_slack_id
+            FROM orders o
+            LEFT JOIN market_items m ON o.item_id = m.id
+            LEFT JOIN users u ON o.user_id = u.id
+            ORDER BY o.created_at DESC
+        ''', ())
+        orders = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return jsonify({'orders': orders}), 200
+        
+    except Exception as e:
+        print(f"Error fetching orders: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/orders/<order_id>', methods=['PUT'])
+@admin_required
+def update_order_status(order_id):
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        if not new_status or new_status not in ['pending', 'processing', 'fulfilled', 'cancelled']:
+            return jsonify({'error': 'Invalid status'}), 400
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+        order = cursor.fetchone()
+        if not order:
+            conn.close()
+            return jsonify({'error': 'Order not found'}), 404
+        
+        old_status = order['status']
+        if old_status == 'cancelled':
+            conn.close()
+            return jsonify({'error': 'Cannot change status of a cancelled order'}), 400
+        if new_status == 'cancelled' and old_status != 'cancelled':
+            cursor.execute('SELECT * FROM users WHERE id = ?', (order['user_id'],))
+            user = cursor.fetchone()
+            
+            if user:
+                new_balance = user['tiles_balance'] + order['total_price']
+                cursor.execute('''
+                    UPDATE users 
+                    SET tiles_balance = ?, updated_at = ? 
+                    WHERE id = ?
+                ''', (new_balance, datetime.now(timezone.utc).isoformat(), user['id']))
+                admin_user_id = session.get('user_id')
+                admin_user = get_user_by_id(admin_user_id)
+                logger.log_action(
+                    action_type=ActionTypes.TILES_BALANCE_CHANGE,
+                    user_id=admin_user_id,
+                    user_name=admin_user['name'],
+                    target_user_id=user['id'],
+                    details={
+                        'reason': 'order_cancelled_refund',
+                        'order_id': order_id,
+                        'amount': order['total_price'],
+                        'old_balance': user['tiles_balance'],
+                        'new_balance': new_balance
+                    }
+                )
+        
+        fulfilled_at = datetime.now(timezone.utc).isoformat() if new_status == 'fulfilled' else order['fulfilled_at']
+        cursor.execute('''
+            UPDATE orders 
+            SET status = ?, fulfilled_at = ?, updated_at = ?
+            WHERE id = ?
+        ''', (new_status, fulfilled_at, datetime.now(timezone.utc).isoformat(), order_id))
+        
+        conn.commit()
+        conn.close()
+        
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id)
+        if new_status == 'cancelled':
+            action_type = ActionTypes.MARKET_ORDER_CANCELLED
+        elif new_status == 'fulfilled':
+            action_type = ActionTypes.MARKET_ORDER_FULFILLED
+        else:
+            action_type = ActionTypes.MARKET_ORDER_UPDATE
+            
+        logger.log_action(
+            action_type=action_type,
+            user_id=user_id,
+            user_name=user['name'],
+            target_user_id=order['user_id'],
+            details={
+                'order_id': order_id,
+                'old_status': old_status,
+                'new_status': new_status,
+                'refunded': new_status == 'cancelled',
+                'refund_amount': order['total_price'] if new_status == 'cancelled' else 0
+            }
+        )
+        
+        return jsonify({
+            'message': 'Order status updated successfully',
+            'refunded': new_status == 'cancelled',
+            'refund_amount': order['total_price'] if new_status == 'cancelled' else 0
+        }), 200
+        
+    except Exception as e:
+        print(f"Error updating order status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+@app.route('/admin/api/market/upload-image', methods=['POST'])
+@admin_required
+def upload_market_image():
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+        upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'market')
+        os.makedirs(upload_dir, exist_ok=True)
+        file_extension = file.filename.rsplit('.', 1)[1].lower()
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        try:
+            img = Image.open(file.stream)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            max_size = (800, 800)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            if file_extension in ['jpg', 'jpeg']:
+                img.save(file_path, 'JPEG', quality=85, optimize=True)
+            elif file_extension == 'png':
+                img.save(file_path, 'PNG', optimize=True)
+            elif file_extension == 'webp':
+                img.save(file_path, 'WEBP', quality=85, optimize=True)
+            else:
+                img.save(file_path, optimize=True)
+                
+        except ImportError:
+            print("PIL not available, saving without optimization")
+            file.seek(0)
+            file.save(file_path)
+        image_url = f"/static/uploads/market/{unique_filename}"
+        
+        return jsonify({'image_url': image_url}), 200
+        
+    except Exception as e:
+        print(f"Error uploading image: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Internal Server Error'}), 500    
 
 @app.route('/api/themes', methods=['GET'])
 @login_required
@@ -828,6 +1330,8 @@ def get_admin_stats():
         user_stats = cursor.fetchone()
         total_users = user_stats['count']
         total_tiles_awarded = user_stats['total_tiles'] or 0
+        
+        # Count active users (users with at least one project)
         cursor.execute('SELECT COUNT(DISTINCT user_id) as count FROM projects')
         active_users = cursor.fetchone()['count']
         
@@ -902,55 +1406,6 @@ def get_admin_stats():
         print(f"Error fetching admin stats: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
-@app.route('/api/user-projects/<user_id>', methods=['GET'])
-@admin_required
-def get_user_projects(user_id):
-    try:
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM projects WHERE user_id = ?', (user_id,))
-        projects = [dict(row) for row in cursor.fetchall()]
-        
-        user = get_user_by_id(user_id)
-        hackatime_projects = {}
-        total_raw_hours = 0
-        
-        if user and user.get('slack_id'):
-            try:
-                url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats?features=projects"
-                headers = autoconnectHackatime()
-                response = requests.get(url, headers=headers, timeout=10)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    raw_projects = data.get("data", {}).get('projects', [])
-                    for proj in raw_projects:
-                        hackatime_projects[proj.get('name')] = proj.get('total_seconds', 0) / 3600
-            except Exception as e:
-                print(f"Error fetching Hackatime data for user {user_id}: {e}")
-        
-        for proj in projects:
-            hackatime_name = proj.get('hackatime_project')
-            if hackatime_name and hackatime_name in hackatime_projects:
-                proj['raw_hours'] = round(hackatime_projects[hackatime_name], 2)
-                total_raw_hours += hackatime_projects[hackatime_name]
-            else:
-                proj['raw_hours'] = 0
-        
-        projects.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-        
-        conn.close()
-        
-        return jsonify({
-            'projects': projects,
-            'total_raw_hours': round(total_raw_hours, 2),
-            'user_name': user.get('name') if user else 'Unknown',
-            'user_slack_id': user.get('slack_id') if user else None
-        }), 200
-    except Exception as e:
-        print(f"Error fetching user projects: {e}")
-        return jsonify({'error': 'Internal Server Error'}), 500
 
 @app.route('/api/projects-by-status/<status>', methods=['GET'])
 @admin_required
@@ -1013,6 +1468,56 @@ def get_projects_by_status(status):
         print(f"Error fetching projects by status: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
+@app.route('/api/user-projects/<user_id>', methods=['GET'])
+@admin_required
+def get_user_projects(user_id):
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM projects WHERE user_id = ?', (user_id,))
+        projects = [dict(row) for row in cursor.fetchall()]
+        
+        user = get_user_by_id(user_id)
+        hackatime_projects = {}
+        total_raw_hours = 0
+        
+        if user and user.get('slack_id'):
+            try:
+                url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats?features=projects"
+                headers = autoconnectHackatime()
+                response = requests.get(url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_projects = data.get("data", {}).get('projects', [])
+                    for proj in raw_projects:
+                        hackatime_projects[proj.get('name')] = proj.get('total_seconds', 0) / 3600
+            except Exception as e:
+                print(f"Error fetching Hackatime data for user {user_id}: {e}")
+        
+        for proj in projects:
+            hackatime_name = proj.get('hackatime_project')
+            if hackatime_name and hackatime_name in hackatime_projects:
+                proj['raw_hours'] = round(hackatime_projects[hackatime_name], 2)
+                total_raw_hours += hackatime_projects[hackatime_name]
+            else:
+                proj['raw_hours'] = 0
+        
+        projects.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
+        conn.close()
+        
+        return jsonify({
+            'projects': projects,
+            'total_raw_hours': round(total_raw_hours, 2),
+            'user_name': user['name'] if user else 'Unknown',
+            'user_slack_id': user.get('slack_id') if user else None
+        }), 200
+    except Exception as e:
+        print(f"Error fetching user projects: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+    
 @app.route('/admin/api/review-project/<project_id>', methods=['POST'])
 @admin_required
 def admin_review_project(project_id):
@@ -1064,7 +1569,7 @@ def admin_review_project(project_id):
     logger.log_action(
         action_type=action_type,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         target_user_id=project.get('user_id'),
         details={
             'project_id': project_id,
@@ -1122,7 +1627,7 @@ def admin_comment_project(project_id):
     logger.log_action(
         action_type=ActionTypes.ADMIN_COMMENT_PROJECT,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         target_user_id=project.get('user_id'),
         details={
             'project_id': project_id,
@@ -1200,7 +1705,7 @@ def admin_award_tiles(project_id):
     logger.log_action(
         action_type=ActionTypes.ADMIN_AWARD_TILES,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         target_user_id=project_user_id,
         details={
             'project_id': project_id,
@@ -1208,7 +1713,7 @@ def admin_award_tiles(project_id):
             'tiles_awarded': tiles_amount,
             'old_balance': current_balance,
             'new_balance': new_balance,
-            'recipient_name': project_user.get('name') if project_user else 'Unknown'
+            'recipient_name': project_user['name'] if project_user else 'Unknown'
         }
     )
     
@@ -1250,7 +1755,7 @@ def admin_add_theme():
     logger.log_action(
         action_type=ActionTypes.ADMIN_CREATE_THEME,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         details={
             'theme_id': theme_id,
             'theme_name': theme_name,
@@ -1294,7 +1799,7 @@ def admin_delete_theme(theme_id):
     logger.log_action(
         action_type=ActionTypes.ADMIN_DELETE_THEME,
         user_id=user_id,
-        user_name=user.get('name'),
+        user_name=user['name'],
         details={
             'theme_id': theme_id,
             'theme_name': theme.get('name')

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico')}}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/mosaic.png')}}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:title" content="Mosaic">
+    <meta property="og:description" content="Build a website every month with a different theme. Get stuff. Repeat.">
+    <meta property="og:image" content="{{ url_for('static', filename='images/mosaic.png', _external=True) }}">
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="{{ request.url }}">
+    <meta property="twitter:title" content="Mosaic">
+    <meta property="twitter:description" content="Build a website every month with a different theme. Get stuff. Repeat.">
+    <meta property="twitter:image" content="{{ url_for('static', filename='images/mosaic.png', _external=True) }}">
+    <title>Market - Mosaic</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/market.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modal_styles.css')}}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav id="navbar">
+        <div class="nav-tab" onclick="window.location.href='/dashboard'">
+            The Studio
+        </div>
+        <div class="nav-tab" onclick="window.location.href='/leaderboard'">
+            Leaderboard
+        </div>
+        <div class="nav-tab active">
+            Market
+        </div>
+        {% if user and is_admin(user) %}
+        <div class="nav-tab" onclick="window.location.href='/admin/dashboard'">
+            Admin Dashboard
+        </div>
+        {% endif %}
+        <div class="nav-tab wip">
+            Orpheus
+        </div>
+    </nav>
+
+    <div class="market-container">
+        <div class="market-header">
+            <div class="header-content">
+                <div class="title-section">
+                    <h1>The Market</h1>
+                    <p>Spend your hard-earned tiles on cool stuff!</p>
+                </div>
+                <div class="balance-section">
+                    <div class="balance-card">
+                        <div class="balance-info">
+                            <span class="balance-label">Your Balance</span>
+                            <span class="balance-amount">{{ user.tiles_balance }} tiles</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="market-filters">
+            <div class="filter-header">
+                <div class="search-bar">
+                    <input type="text" id="item-search" placeholder="Search items..." oninput="filterItems()">
+                </div>
+                <button class="orders-toggle-btn" onclick="toggleOrdersSidebar()">
+                    My Orders
+                </button>
+            </div>
+            <div class="sort-options">
+                <label>
+                    Sort by:
+                    <select id="sort-select" onchange="sortItems()">
+                        <option value="price-asc">Price: Low to High</option>
+                        <option value="price-desc">Price: High to Low</option>
+                        <option value="hours-asc">Hours: Low to High</option>
+                        <option value="hours-desc">Hours: High to Low</option>
+                        <option value="name">Name (A-Z)</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+
+        <div class="market-grid" id="market-items">
+        </div>
+    </div>
+    <div id="orders-sidebar" class="orders-sidebar">
+        <div class="sidebar-header">
+            <h2>My Orders</h2>
+            <button class="close-sidebar-btn" onclick="toggleOrdersSidebar()">×</button>
+        </div>
+        <div class="orders-list" id="my-orders">
+        </div>
+    </div>
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleOrdersSidebar()"></div>
+    <div id="purchase-modal" class="modal hidden">
+        <div class="modal-content purchase-modal-content">
+            <button class="close-btn" onclick="closePurchaseModal()">×</button>
+            <div id="purchase-modal-body">
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/alert_modal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/market.js') }}"></script>
+    <script>
+        function toggleOrdersSidebar() {
+            const sidebar = document.getElementById('orders-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+    </script>
+</body>
+</html>
