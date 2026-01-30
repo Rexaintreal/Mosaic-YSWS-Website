@@ -497,6 +497,137 @@ def get_user_hackatime_projects():
         print(f"Error fetching Hackatime projects: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
+
+@app.route("/api/project-details/<project_id>", methods=['GET'])
+@login_required
+def get_project_details(project_id):
+    user_id = session.get('user_id')
+    user = get_user_by_id(user_id)
+    
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
+    project_row = cursor.fetchone()
+    
+    if not project_row:
+        conn.close()
+        return jsonify({'error': 'Project not found'}), 404
+    
+    project = dict(project_row)
+    
+    # STRICT access control
+    is_owner = project.get('user_id') == user_id
+    is_admin_user = is_admin(user)
+    
+    if not is_owner and not is_admin_user:
+        conn.close()
+        logger.log_action(
+            action_type=ActionTypes.UNAUTHORIZED_ACCESS_ATTEMPT,
+            user_id=user_id,
+            user_name=user['name'],
+            details={
+                'project_id': project_id,
+                'owner': project.get('user_id'),
+                'action': 'view_project_details'
+            }
+        )
+        return jsonify({'error': 'Forbidden - Not your project'}), 403
+    
+    project_owner = get_user_by_id(project['user_id'])
+    project_owner_name = project_owner.get('name') if project_owner else 'Unknown User'
+
+    raw_hours = 0
+    if project.get('hackatime_project'):
+        project_user = get_user_by_id(project['user_id'])
+        if project_user and project_user.get('slack_id'):
+            try:
+                url = f"{HACKATIME_BASE_URL}/users/{project_user['slack_id']}/stats?features=projects"
+                headers = autoconnectHackatime()
+                response = requests.get(url, headers=headers, timeout=5)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_projects = data.get("data", {}).get('projects', [])
+                    for proj in raw_projects:
+                        if proj.get('name') == project['hackatime_project']:
+                            raw_hours = round(proj.get('total_seconds', 0) / 3600, 2)
+                            break
+            except Exception as e:
+                print(f"Error Fetching Hackatime Projects {e}")
+    
+    cursor.execute('SELECT * FROM project_comments WHERE project_id = ?', (project_id,))
+    comments = []
+    for comment_row in cursor.fetchall():
+        comment = dict(comment_row)
+        admin = get_user_by_id(comment['admin_id'])
+        comments.append({
+            'admin_name': admin.get('name') if admin else 'Admin',
+            'comment': comment['comment'],
+            'created_at': comment.get('created_at')
+        })
+    
+    conn.close()
+    return jsonify({
+        'id': project['id'],
+        'name': project.get('name'),
+        'detail': project.get('detail'),
+        'hackatime_project': project.get('hackatime_project'),
+        'status': project.get('status'),
+        'raw_hours': raw_hours,
+        'approved_hours': project.get('approved_hours', 0),
+        'screenshot_url': project.get('screenshot_url'),
+        'github_url': project.get('github_url'),
+        'demo_url': project.get('demo_url'),
+        'summary': project.get('summary'),
+        'languages': project.get('languages'),
+        'theme': project.get('theme'),
+        'submitted_at': project.get('submitted_at'),
+        'reviewed_at': project.get('reviewed_at'),
+        'comments': comments,
+        'user_name': project_owner_name
+    }), 200
+
+@app.route('/api/project-hours', methods=['GET'])
+@login_required
+def get_project_hours():
+    user_id = session.get('user_id')
+    user = get_user_by_id(user_id)
+    
+    if not user or not user.get('slack_id'):
+        return jsonify({'hours': 0, 'message': 'Not connected to Hackatime'}), 200
+    
+    project_name = request.args.get('project-name') or request.args.get('project_name')
+    if not project_name:
+        return jsonify({'hours': 0, 'message': 'No project name provided'}), 200
+    
+    try:
+        url = f'{HACKATIME_BASE_URL}/users/{user["slack_id"]}/stats?features=projects'
+        headers = autoconnectHackatime()
+        
+        print(f"[PROJECT-HOURS] Fetching for user {user_id}, project: {project_name}")
+        
+        response = requests.get(url=url, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            raw_projects = data.get("data", {}).get('projects', [])
+            for proj in raw_projects:
+                if proj.get('name') == project_name:
+                    hours = proj.get('total_seconds', 0) / 3600
+                    print(f"[PROJECT-HOURS] Found project: {hours} hours")
+                    return jsonify({'hours': round(hours, 2)}), 200
+            print(f"[PROJECT-HOURS] Project not found in Hackatime")
+            return jsonify({'hours': 0, 'message': 'Project not found'}), 200
+        else:
+            print(f"[PROJECT-HOURS] Hackatime API error: {response.status_code}")
+            return jsonify({'hours': 0, 'message': 'Could not fetch from Hackatime'}), 200
+    except Exception as e:
+        print(f"[PROJECT-HOURS ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'hours': 0, 'message': 'Error fetching hours'}), 200
+
+
 @app.route('/api/projects', methods=['GET'])
 @login_required
 def get_projects():
