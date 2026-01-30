@@ -14,6 +14,8 @@ class DatabaseManager:
     def init_database(self):
         conn = self.get_connection()
         cursor = conn.cursor()
+        
+        # Create users table - safe: uses IF NOT EXISTS
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
@@ -34,6 +36,8 @@ class DatabaseManager:
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Create projects table - safe: uses IF NOT EXISTS
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
@@ -59,6 +63,8 @@ class DatabaseManager:
                 FOREIGN KEY (assigned_admin_id) REFERENCES users(id)
             )
         ''')
+        
+        # Create project_comments table - safe: uses IF NOT EXISTS
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS project_comments (
                 id TEXT PRIMARY KEY,
@@ -70,6 +76,8 @@ class DatabaseManager:
                 FOREIGN KEY (admin_id) REFERENCES users(id)
             )
         ''')
+        
+        # Create audit_logs table - safe: uses IF NOT EXISTS
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,6 +95,8 @@ class DatabaseManager:
                 FOREIGN KEY (target_user_id) REFERENCES users(id)
             )
         ''')
+        
+        # Create themes table - safe: uses IF NOT EXISTS
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS themes (
                 id TEXT PRIMARY KEY,
@@ -97,6 +107,44 @@ class DatabaseManager:
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Create market_items table - NEW TABLE, safe: uses IF NOT EXISTS
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS market_items (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                image_url TEXT,
+                price INTEGER NOT NULL,
+                estimated_hours REAL DEFAULT 0.0,
+                stock_quantity INTEGER DEFAULT -1,
+                is_active INTEGER DEFAULT 1,
+                category TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create orders table - NEW TABLE, safe: uses IF NOT EXISTS
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                quantity INTEGER DEFAULT 1,
+                total_price INTEGER NOT NULL,
+                status TEXT DEFAULT 'pending',
+                contact_info TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                fulfilled_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (item_id) REFERENCES market_items(id)
+            )
+        ''')
+        
+        # Create indexes - safe: uses IF NOT EXISTS
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_slack_id ON users(slack_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_identity_id ON users(identity_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)')
@@ -106,14 +154,16 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON audit_logs(action_type)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_themes_is_active ON themes(is_active)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_market_items_is_active ON market_items(is_active)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)')
         
         conn.commit()
         conn.close()
-        print("Database initialized successfully")
+        print("Database initialized successfully - All existing data preserved")
     
     def generate_id(self):
         import uuid
         return str(uuid.uuid4())
 
-# Initialize database on import
 db_manager = DatabaseManager()

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Admin - Mosaic</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/market.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_market_styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modal_styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav id="navbar">
+        <div class="nav-tab" onclick="window.location.href='/dashboard'">
+            The Studio
+        </div>
+        <div class="nav-tab" onclick="window.location.href='/leaderboard'">
+            Leaderboard
+        </div>
+        <div class="nav-tab" onclick="window.location.href='/market'">
+            Market
+        </div>
+        <div class="nav-tab" onclick="window.location.href='/admin/dashboard'">
+            Admin Dashboard
+        </div>
+        <div class="nav-tab active">
+            Admin Market
+        </div>
+        <div class="nav-tab" onclick="window.location.href='/admin/audit-logs'">
+            Audit Logs
+        </div>
+    </nav>
+
+    <div class="admin-container">
+        <div class="admin-header">
+            <div>
+                <h1>Market Management</h1>
+                <p>Manage products and orders</p>
+            </div>
+        </div>
+
+        <div class="admin-tabs">
+            <button class="tab-btn active" onclick="switchTab('products')">
+                Products Management
+            </button>
+            <button class="tab-btn" onclick="switchTab('orders')">
+                Orders Management
+            </button>
+        </div>
+
+        <div id="products-tab" class="tab-content active">
+            <div class="tab-header">
+                <h2>Product Inventory</h2>
+                <button class="btn-add-item" onclick="openAddItemModal()">
+                    Add New Item
+                </button>
+            </div>
+            <div class="items-grid" id="admin-items">
+                <div class="loading">
+                    <p>Loading products...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="orders-tab" class="tab-content">
+            <div class="tab-header">
+                <h2>Order Management</h2>
+            </div>
+            <div class="orders-filters">
+                <button class="filter-btn active" data-status="all" onclick="filterOrders('all')">
+                    All Orders
+                </button>
+                <button class="filter-btn" data-status="pending" onclick="filterOrders('pending')">
+                    Pending
+                </button>
+                <button class="filter-btn" data-status="processing" onclick="filterOrders('processing')">
+                    Processing
+                </button>
+                <button class="filter-btn" data-status="fulfilled" onclick="filterOrders('fulfilled')">
+                    Fulfilled
+                </button>
+                <button class="filter-btn" data-status="cancelled" onclick="filterOrders('cancelled')">
+                    Cancelled
+                </button>
+            </div>
+            <div class="orders-table-container">
+                <table class="orders-table" id="orders-table">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>User</th>
+                            <th>Slack ID</th>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-tbody">
+                        <tr>
+                            <td colspan="9" style="text-align: center; padding: 40px;">
+                                <p>Loading orders...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="item-modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeItemModal()">×</button>
+            <h2 id="item-modal-title">Add New Item</h2>
+            <form id="item-form" onsubmit="submitItem(event)">
+                <input type="hidden" id="item-id">
+                
+                <div class="form-group">
+                    <label for="item-name">Item Name *</label>
+                    <input type="text" id="item-name" required placeholder="e.g., Raspberry Pi 5">
+                </div>
+
+                <div class="form-group">
+                    <label for="item-description">Description</label>
+                    <textarea id="item-description" rows="3" placeholder="Brief description of the item..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="item-price">Price (tiles) *</label>
+                        <input type="number" id="item-price" required min="0" placeholder="25">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="item-hours">Estimated Hours</label>
+                        <input type="number" id="item-hours" step="0.5" min="0" placeholder="4.0">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="item-stock">Stock Quantity</label>
+                    <input type="number" id="item-stock" value="-1" placeholder="-1 for unlimited">
+                    <small>Use -1 for unlimited stock</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="item-image-file">Product Image</label>
+                    <div class="image-upload-container">
+                        <input type="file" id="item-image-file" accept="image/*" onchange="previewImage(event)">
+                        <div id="image-preview" class="image-preview">
+                            <p>Click to upload or drag image here</p>
+                            <small>Max size: 800x800px | Formats: JPG, PNG, WebP, GIF</small>
+                        </div>
+                        <input type="hidden" id="item-image-path">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="item-active" checked>
+                        <span>Active (visible to users)</span>
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeItemModal()">Cancel</button>
+                    <button type="submit" class="btn-primary" id="submit-btn">
+                        Save Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="order-modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeOrderModal()">×</button>
+            <h2>Order Details</h2>
+            <div id="order-details">
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/alert_modal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin_market.js') }}"></script>
+</body>
+</html>
