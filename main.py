@@ -364,6 +364,43 @@ def logout():
     
     return redirect('/')
 
+def get_user_stats(user):
+    stats = {
+        'total_hours': 0,
+        'completed_projects': 0,
+        'in_review_projects': 0
+    }
+    
+    if not user.get('slack_id'):
+        return stats
+    
+    try:
+        headers = autoconnectHackatime()
+        url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats"
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            stats['total_hours'] = round(data.get('data', {}).get('total_seconds', 0) / 3600, 2)
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND status = ?', 
+                      (user['id'], 'approved'))
+        stats['completed_projects'] = cursor.fetchone()['count']
+        
+        cursor.execute('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND status = ?', 
+                      (user['id'], 'in_review'))
+        stats['in_review_projects'] = cursor.fetchone()['count']
+        
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error Fetching user stats: {e}")
+    
+    return stats
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -371,10 +408,61 @@ def dashboard():
     user = get_user_by_id(user_id)
     
     if not user:
-        session.clear()
-        return redirect('/signin')
+        return redirect("/signin")
     
-    return render_template('dashboard.html', user=user)
+    auto_connected = user.get('slack_id') is not None
+    projects = []
+    
+    if auto_connected:
+        try:
+            url = f"{HACKATIME_BASE_URL}/users/{user['slack_id']}/stats?features=projects&&limit=1000&features=projects&start_date=2025-12-23"
+            headers = autoconnectHackatime()
+            
+            #debugging
+            print(f"[HACKATIME DEBUG] Fetching projects for slack_id: {user['slack_id']}")
+            print(f"[HACKATIME DEBUG] URL: {url}")
+            print(f"[HACKATIME DEBUG] API Key present: {bool(HACKATIME_API_KEY)}")
+            
+            response = requests.get(url, headers=headers, timeout=5)
+            
+            print(f"[HACKATIME DEBUG] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                raw_projects = data.get("data", {}).get('projects', [])
+                if isinstance(raw_projects, list):
+                    projects = [{
+                        'name': proj.get('name'),
+                        'total_seconds': proj.get('total_seconds', 0),
+                        'detail': proj.get('description', '')
+                    } for proj in raw_projects]
+                    print(f"[HACKATIME DEBUG] Successfully fetched {len(projects)} projects")
+            else:
+                print(f"[HACKATIME DEBUG] Failed with status {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"[HACKATIME ERROR] Error Fetching Hackatime Projects: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"[HACKATIME DEBUG] User not connected (no slack_id)")
+    
+    # Get saved projects
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM projects WHERE user_id = ?', (user_id,))
+    saved_projects = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    stats = get_user_stats(user)
+    
+    return render_template(
+        "dashboard.html",
+        user=user,
+        auto_connected=auto_connected,
+        projects=projects,
+        saved_projects=saved_projects,
+        stats=stats
+    )
 
 @app.route('/api/user/hackatime-projects', methods=['GET'])
 @login_required
