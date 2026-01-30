@@ -90,6 +90,16 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def page_login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_id = session.get('user_id')
+        if not user_id:
+            session['next_url'] = request.url
+            return redirect('/signin')
+        return f(*args, **kwargs)
+    return decorated_function
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -663,8 +673,47 @@ def delete_project(project_id):
     
     return jsonify({'message': 'Project deleted successfully'}), 200
 
+@app.route('/leaderboard')
+def leaderboard():
+    user_id = session.get('user_id')
+    user = None
+    if user_id:
+        user = get_user_by_id(user_id)
+    
+    users_data = []
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM users')
+    all_users = [dict(row) for row in cursor.fetchall()]
+    
+    for u in all_users:
+        cursor.execute('''
+            SELECT COUNT(*) as count, SUM(approved_hours) as total_hours 
+            FROM projects 
+            WHERE user_id = ? AND status = ?
+        ''', (u['id'], 'approved'))
+        
+        result = cursor.fetchone()
+        projects_count = result['count']
+        total_hours = result['total_hours'] or 0
+        
+        if total_hours > 0:
+            users_data.append({
+                'name': u.get('name') or f'User #{u["id"]}',
+                'total_hours': round(total_hours, 2),
+                'projects_count': projects_count,
+                'tiles': u.get('tiles_balance', 0)
+            })
+    
+    conn.close()
+    
+    users_data.sort(key=lambda x: x['total_hours'], reverse=True)
+    
+    return render_template('leaderboard.html', leaderboard=users_data, user=user)
+
 @app.route('/market')
-@login_required
+@page_login_required
 def shop():
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)

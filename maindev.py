@@ -82,6 +82,16 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def page_login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_id = session.get('user_id')
+        if not user_id:
+            session['next_url'] = request.url
+            return redirect('/signin')
+        return f(*args, **kwargs)
+    return decorated_function
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -757,7 +767,7 @@ def leaderboard():
     return render_template('leaderboard.html', leaderboard=users_data, user=user)
 
 @app.route('/market')
-@login_required
+@page_login_required
 def shop():
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)
