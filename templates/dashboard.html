@@ -154,31 +154,49 @@
     <div id="submit-overlay" class="overlay hidden">
         <div class="overlay-content">
             <h2>Submit Project for Review</h2>
+
+            <div class="submissions-closed-banner" style="
+                background: #fff3cd;
+                border: 1px solid #ffc107;
+                border-radius: 6px;
+                padding: 12px 16px;
+                margin-bottom: 16px;
+                color: #856404;
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                🚫 Submissions are currently closed.
+            </div>
+
             <form id="submit-project-form">
                 <input type="hidden" id="submit-project-id">
                 <div class="form-group">
                     <label for="screenshot-url">Image Link (via #cdn on Slack!) *</label>
-                    <input type="url" id="screenshot-url" name="screenshot-url" required>
+                    <input type="url" id="screenshot-url" name="screenshot-url" required disabled>
                     <div id="screenshot-preview" class="image-preview"></div>
                 </div>
                 <div class="form-group">
                     <label for="github-url">Github Link (please set to Public) *</label>
-                    <input type="url" id="github-url" name="github-url" required>
+                    <input type="url" id="github-url" name="github-url" required disabled>
                 </div>
                 <div class="form-group">
                     <label for="demo-url">Demo Link (please ensure it works!) *</label>
-                    <input type="url" id="demo-url" name="demo-url" required>
+                    <input type="url" id="demo-url" name="demo-url" required disabled>
                 </div>
                 <div class="form-group">
                     <label for="languages">Languages Used *</label>
-                    <input type="text" id="languages" name="languages" required placeholder="e.g. Python, Javascript, HTML, CSS">
+                    <input type="text" id="languages" name="languages" required disabled placeholder="e.g. Python, Javascript, HTML, CSS">
                 </div>
                 <div class="form-group">
                     <label for="summary">Project Summary *</label>
-                    <textarea id="summary" name="summary" required placeholder="Explain what your project does and what you learnt..." rows="4"></textarea>
+                    <textarea id="summary" name="summary" required disabled placeholder="Explain what your project does and what you learnt..." rows="4"></textarea>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary">Submit for Review</button>
+                    <button type="submit" class="btn-primary" disabled style="opacity: 0.5; cursor: not-allowed;" title="Submissions are currently closed">
+                        🚫 Submissions Closed
+                    </button>
                     <button type="button" id="close-submit" class="btn-secondary">Cancel</button>
                 </div>
             </form>

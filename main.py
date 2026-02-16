@@ -555,6 +555,11 @@ def add_project_api():
 @app.route("/api/submit-project/<project_id>", methods=['POST'])
 @login_required
 def submit_project(project_id):
+    return jsonify({
+        'error': 'Submissions are currently closed. Please check back later.'
+    }), 403
+
+    # --- Original submit logic preserved below (unreachable until re-enabled) ---
     user_id = session.get('user_id')
     user = get_user_by_id(user_id)
     
